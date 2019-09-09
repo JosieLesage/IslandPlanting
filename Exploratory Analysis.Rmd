@@ -1,0 +1,219 @@
+---
+title: "Island Planting Project - Exploratory Analysis"
+output: html_document
+---
+  
+  
+## Background
+Restoration must balance limited resources towards the most effective outcomes, given specified targets. Removing and suppressing invasive vegetation can give introduced native species the opportunity to establish. There are a variety of techniques used to help native species establish by suppressing weeds. Initially, laying mulch can reduce the cover of weedy species. However, it is less clear how much this initial benefit affects long-term success and native cover, or whether un-mulched areas will “catch up” with mulched plots once species establish. Annual mowing is another technique that can be used to reduce invasive species cover, and therefore potentially benefit native species.  
+  
+In addition to the suppression of weedy invasive species, native species must be reintroduced to the system. The nucleation model of succession may provide insight into a technique to successfully restore system with reduced resource inputs. By planting target species in clumps (“islands”) as opposed to throughout the plot, we may effectively restore areas with reduced inputs. After multiple years of growth and spread, the native islands may expand, resulting over the long term in similar levels of native species cover with a lower up-front resource investment.  
+  
+**This study addresses the following questions:**  
+1. Will island-planted plots have the same native cover as full-planted plots after several years?, and Will island planted plots spread outside of their planted areas?  
+2. Does annual mowing benefit native species cover for either grasses or forbs?  
+3. Does mulching affect native cover in the long-term/how long does the mulching effect last?  
+4. Of the species planted, which were most successful in the long term? 
+  
+  
+```{r Setup, include=FALSE}
+# data
+guild_12_18 <- read.csv("Guild_2012_2018.csv")
+species_12_18 <- read.csv("Species_2014_2018.csv")
+
+# packages
+library(tidyverse)
+library(grid)
+library(gridExtra)
+
+
+# legend extractor function
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+# figure colors
+colors3 <- c("darkslategrey", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+
+## Question 1: 
+**1. Will island-planted plots have the same native cover as full-planted plots after several years?, and Will island planted plots spread outside of their planted areas?**  
+
+To address this question, I graphed native and exotic guild cover in three treatment plots over time:
+  
+```{r Formatting guild-level data, echo=FALSE}
+
+Forb_all <- guild_12_18 %>%
+  filter(Planted.guild == "Forb") %>%
+  group_by(Category, Year) %>%
+  summarise(mean.cov = mean(r.nat.forb),
+            std.err = sd(r.nat.forb)/sqrt(sum(!is.na(r.nat.forb))))
+Forb_all$Year <- as.numeric(Forb_all$Year)
+
+
+AllYrForb<- ggplot(Forb_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean.cov - std.err, 
+                    ymax = mean.cov + std.err),
+               width=0.2) +
+  scale_color_manual(values = colors3,
+                    name = "Plot Treatment") +
+  scale_shape_manual(values = c(1, 2, 4, 5, 6),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = "Relative Native \n Forb Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 45)) +
+  scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012, 2018, 1))
+
+
+# ---- Native Grasses ----
+Grass_all <- guild_12_18 %>%
+  filter(Planted.guild == "Grass") %>%
+  group_by(Category, Year) %>%
+  summarise(mean.cov = mean(r.nat.grass),
+            std.err = sd(r.nat.grass)/sqrt(sum(!is.na(r.nat.grass))))
+Grass_all$Year <- as.numeric(Grass_all$Year)
+
+AllYrGrass <- ggplot(Grass_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean.cov - std.err, 
+                    ymax = mean.cov + std.err),
+                width=0.2) +
+  scale_color_manual(values = colors3,
+                     name = "Plot Treatment") +
+  scale_shape_manual(values = c(1, 2, 4, 5, 6),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = "Relative Native \n Grass Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 45)) +
+  scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012, 2018, 1))
+
+# ---- Exo Grass ---- 
+ExoGrass_all <- guild_12_18 %>%
+  group_by(Category, Year) %>%
+  summarise(mean.cov = mean(r.exo.grass),
+            std.err = sd(r.exo.grass)/sqrt(sum(!is.na(r.exo.grass))))
+ExoGrass_all$Year <- as.numeric(ExoGrass_all$Year)
+
+AllYrEGrass <- ggplot(ExoGrass_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean.cov - std.err, 
+                    ymax = mean.cov + std.err),
+                width=0.2) +
+  scale_color_manual(values = colors3,
+                     name = "Plot Treatment") +
+  scale_shape_manual(values = c(1, 2, 4, 5, 6),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = "Relative Exotic \n Grass Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_text(colour="black", size = 10),
+        axis.title.x = element_text(colour="black", size = 12),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5)) +
+  coord_cartesian(ylim = c(0, 70)) +
+  scale_y_continuous(breaks = seq(0, 70, 10), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012, 2018, 1))
+
+
+# ---- Exo Forbs ---- 
+ExoForb_all <- guild_12_18 %>%
+  group_by(Category, Year) %>%
+  summarise(mean.cov = mean(r.exo.forb),
+            std.err = sd(r.exo.forb)/sqrt(sum(!is.na(r.exo.forb))))
+ExoForb_all$Year <- as.numeric(ExoForb_all$Year)
+
+AllYrEForb <- ggplot(ExoForb_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean.cov - std.err, 
+                    ymax = mean.cov + std.err),
+                width=0.2) +
+  scale_color_manual(values = colors3,
+                     name = "Plot Treatment") +
+  scale_shape_manual(values = c(1, 2, 4, 5, 6),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = "Relative Exotic \n Forb Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_text(colour="black", size = 10),
+        axis.title.x = element_text(colour="black", size = 12),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5)) +
+  coord_cartesian(ylim = c(0, 70)) +
+  scale_y_continuous(breaks = seq(0, 70, 10), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012, 2018, 1))
+
+AllYrLeg <- g_legend(AllYrGrass)
+
+grid.arrange(arrangeGrob(AllYrForb + theme(legend.position="none"),
+                         AllYrGrass + theme(legend.position="none"),
+                         AllYrEForb + theme(legend.position="none"),
+                         AllYrEGrass + theme(legend.position="none"),
+                         nrow = 2),
+             AllYrLeg, nrow = 2, heights = c(12, 1))
+
+
+```
+  
+   
+   
+   
