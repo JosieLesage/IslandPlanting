@@ -1,0 +1,240 @@
+---
+title: "Island Planting - Cleaning and Compiling Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(grid)
+library(lme4)
+
+```
+
+
+
+## Creating a single **GUILD LEVEL** dataframe (2012-2018)
+
+This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.
+
+To begin, we will import all of the .csv files as objects. 
+After the data is imported, we clean each year and the compile them together into a single document.
+
+```{r Import guild-level, include = FALSE}
+setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
+
+D2018 <- read.csv("2018_VegCover.csv")
+D2017 <- read.csv("2017_VegCover.csv") 
+D2016 <- read.csv("2016_VegCover.csv")
+D2015 <- read.csv("2015_VegCover.csv")
+D2014 <- read.csv("2014_VegCover.csv")
+D2013 <- read.csv("2013_BackgroundVeg.csv")
+D2012 <- read.csv("2012_BackgroundVeg.csv")
+
+```
+
+
+```{r Guild-level restructure and compile, include = FALSE}
+# ---- 2018 ----
+D2018 <- D2018 %>%
+  replace(is.na(.), 0) %>%
+  mutate(Data.Collector = "JosieJoia",
+         Year = "2018",
+         nat.grass = Bro.car + Hor.bra + Sti.pul,
+         nat.forb = Gri.str + Ach.mil + Sym.chi + Jun.pat) %>%
+  rename(Plot = Plot.ID,
+         total.cover = Total.cover) %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2018$Year <- as.factor(D2018$Year)
+D2018$Plot <- as.factor(D2018$Plot)
+
+
+# ---- 2017 ----
+D2017 <- D2017 %>%
+  mutate(total.cover = (nat.forb + nat.grass + Exo.forb + Exo.grass + Bare + Thatch + Other)) %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2017$QuadLocation <- recode(D2017$QuadLocation, In = "Island")
+D2017$Year <- as.factor(D2017$Year)
+D2017$Plot <- as.factor(D2017$Plot)
+
+
+# ---- 2016 ---- 
+D2016 <- D2016 %>%
+  replace(is.na(.), 0) %>%
+  mutate(Data.Collector = "Rusk",
+         Year = "2016",
+         total.cover = (Exo.grass + Exo.forb + Thatch + Bare + Brocar + Horbra + Stipul + Gristr + Achmil + Symchi + Junpat),
+         nat.grass = Brocar + Horbra + Stipul,
+         nat.forb = Gristr + Achmil + Symchi + Junpat) %>%
+  mutate(Category = ifelse(Treatment == "Full Mulched", "Full Mulched", ifelse 
+                           (Treatment == "Full Not Mulched", "Full Not Mulched", ifelse
+                             (Treatment == "Island Mulched", "Island Mulched", "WRONG")))) %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2016$Plot <- as.factor(D2016$Plot)
+
+
+# ---- 2015 ----
+D2015 <- D2015 %>%
+  replace(is.na(.), 0) %>%
+  rename(Data.Collector = Data.Collectors,
+         Plot = plot..,
+         Category = Treatment) %>%
+  mutate(total.cover = (Exo.grass + Exo.forb + Thatch + Bare + Bro.car + Hor.bra + Sti.pul + Gri.str + Ach.mil + Sym.chi + Jun.pat),
+         nat.grass = Bro.car + Hor.bra + Sti.pul,
+         nat.forb = Gri.str + Ach.mil + Sym.chi + Jun.pat,
+         Mulch = ifelse(Category == "Full Mulched", "Mulch", ifelse 
+                           (Category == "Full Not Mulched", "No Mulch", ifelse
+                             (Category == "Island Mulched", "Mulch", "WRONG")))) %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2015$Plot <- as.factor(D2015$Plot)
+D2015$Year <- as.factor(D2015$Year)
+
+  
+# ---- 2014 ----
+D2014 <- D2014 %>%
+  mutate(Planted.guild = ifelse(Quadrant == "NE", "Grass", ifelse 
+                                (Quadrant == "NW", "Grass", ifelse
+                                  (Quadrant == "SE", "Forb", ifelse
+                                    (Quadrant == "SW", "Forb", "WRONG")))),
+    total.cover = (nat.forb + nat.grass + Exo.forb + Exo.grass + Bare + Mulch.1 + Gopher + Thatch),
+    QuadLocation = "Not recorded") %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2014$Year <- as.factor(D2014$Year)
+D2014$Plot <- as.factor(D2014$Plot)
+
+# ---- 2013 ----
+D2013 <- D2013 %>%
+  mutate(Year = "2013") %>%
+  filter(Treatment != "Seeded") %>%
+  mutate(Category = ifelse(Treatment.Mulch == "IPNM", "Island Not Mulched", 
+                           ifelse (Treatment.Mulch == "FPNM", "Full Not Mulched", 
+                                   ifelse(Treatment.Mulch == "IPM", "Island Mulched",
+                                          ifelse(Treatment.Mulch == "FPM", "Full Mulched", "WRONG")))),
+         Planting.Type = ifelse(Treatment == "Full", "Full",
+                                ifelse(Treatment == "Island", "Island", "WRONG")),
+         QuadLocation = ifelse(Planting.Type == "Full", "Full", 
+                               ifelse(Planting.Type == "Island", "Not recorded", "WRONG")),
+         Mow = ifelse(Mow =="Mow", "Mowed",
+                      ifelse(Mow == "No Mow", "Unmowed", "WRONG"))) %>%
+rename(
+    Planted.guild = Grass.or.Forb,
+    Mowing.treatment = Mow,
+    Exo.grass = Exotic.Grass,
+    Exo.forb = Exotic.Forb,
+    nat.grass = Native.Grass,
+    nat.forb = Native.Forb) %>%
+  mutate(total.cover = (nat.forb + nat.grass + Exo.forb + Exo.grass + Bare.Ground.Cover + Mulch.Cover)) %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover) %>%
+  filter(Category != "Island Not Mulched")
+D2013$Year <- as.factor(D2013$Year)
+D2013$Plot <- as.factor(D2013$Plot)
+
+
+# ---- 2012 ----
+D2012 <- D2012 %>%
+  replace(is.na(.), 0) %>%
+  mutate(total.cover = (nat.forb + nat.grass + Exo.forb + Exo.grass + Bare + Mulch.Cover + Thatch),
+         Data.Collector = "Heaston",
+         Year = "2012",
+         QuadLocation = "Not recorded") %>%
+  filter(Treatment != "Seeded",
+         Category != "Island No Mulch") %>%
+  select(Data.Collector, Year, Plot, Mulch, Planted.guild, Category, QuadLocation, Mowing.treatment, 
+         Exo.grass, Exo.forb, nat.grass, nat.forb, total.cover)
+D2012$Plot <- as.factor(D2012$Plot)
+
+
+# Smoosh data together --------------------------------
+guilds_12_18 <- full_join(D2018, D2017, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                 "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+guilds_12_18 <- full_join(guilds_12_18, D2016, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                  "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+guilds_12_18 <- full_join(guilds_12_18, D2015, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                            "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+guilds_12_18 <- full_join(guilds_12_18, D2014, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                            "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+guilds_12_18 <- full_join(guilds_12_18, D2013, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                            "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+guilds_12_18 <- full_join(guilds_12_18, D2012, by = c("Year", "Data.Collector", "Plot", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                            "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", "total.cover", "QuadLocation"))
+
+```
+
+```{r Guild-level: remove error data, include = FALSE}
+guilds_12_18 <- guilds_12_18 %>%
+  filter(total.cover > 2.5) %>%
+  replace(is.na(.), 0) %>%
+  mutate(r.exo.grass = (Exo.grass/total.cover)*100,
+         r.exo.forb = (Exo.forb/total.cover)*100,
+         r.nat.grass = (nat.grass/total.cover)*100,
+         r.nat.forb = (nat.forb/total.cover)*100,
+         Category = recode(Category, "Full Mulch" = "Full Mulched",
+                           "Full No Mulch" = "Full Not Mulched",
+                           "Island Mulch" = "Island Mulched",
+                           "Island Mulch " = "Island Mulched"),
+         Mowing.treatment = recode(Mowing.treatment, "Mowed " = "Mowed"),
+         QuadLocation = recode(QuadLocation, " " = "Full",
+                               "N/A" = "Not recorded"))
+
+```
+
+
+## Creating a single **SPECIES LEVEL** dataframe (2014-2018)
+
+Species level data was only taken in some years, so we will also produce code to generate species-level dataframes. First, we'll import the data, and then we'll compile it into one dataframe. 
+
+
+
+```{r Import species-level, include = FALSE}
+setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (2) Spring/Island Planting Exp/Old Data")
+pplots <- read.csv("PlantedPlots.csv")
+setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
+D2014 <- read.csv("2014_VegCover.csv")
+D2017 <- read.csv("2017_VegCover.csv")
+
+```
+
+```{r Species level restructure and compile, include = FALSE}
+pplots <- select(pplots, Year, Data.Collector, Plot, ID, Mulch, Planted.guild, Category, Mowing.treatment, 
+                 Planting.Type, QuadLocation, Exo.grass, Exo.forb, nat.grass, nat.forb, 
+                 Bro.car, Sti.pul, Hor.bra, Gri.str, Ach.mil, Sym.chi, Jun.pat)
+pplots$Year <- as.factor(pplots$Year)
+pplots$Category <- as.factor(pplots$Category)
+pplots$Mowing.treatment <- as.factor(pplots$Mowing.treatment)
+pplots$Planting.Type <- as.factor(pplots$Planting.Type)
+pplots$QuadLocation <- as.factor(pplots$QuadLocation)
+pplots$Year <- as.factor(pplots$Year)
+
+
+D2014 <- select(D2014, Data.Collector, Year, Plot, ID, Mulch, Planted.guild, Category, Mowing.treatment, 
+                Planting.Type, Exo.grass, Exo.forb, nat.grass, nat.forb, 
+                Bro.car, Sti.pul, Hor.bra, Gri.str, Ach.mil, Sym.chi, Jun.pat)
+D2014$Year <- as.factor(D2014$Year)
+
+D2017 <- select(D2017, Data.Collector, Year, Plot, ID, Mulch, Planted.guild, Category, Mowing.treatment, 
+                Planting.Type, Exo.grass, Exo.forb, nat.grass, nat.forb, 
+                Bro.car, Sti.pul, Hor.bra, Gri.str, Ach.mil, Sym.chi, Jun.pat)
+D2017$Year <- as.factor(D2017$Year)
+
+
+species_14_18 <- full_join(pplots, D2014, by = c("Year", "Data.Collector", "Plot", "ID", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                 "Planting.Type", "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", 
+                                           "Bro.car", "Sti.pul", "Hor.bra", "Gri.str", "Ach.mil", "Sym.chi", "Jun.pat"))
+species_14_18 <- full_join(species_14_18, D2017, by = c("Year", "Data.Collector", "Plot", "ID", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
+                                                        "Planting.Type", "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", 
+                                                        "Bro.car", "Sti.pul", "Hor.bra", "Gri.str", "Ach.mil", "Sym.chi", "Jun.pat"))
+```
+
+
+## Uploading .csv files to GitHub
+
+```{r Upload to GitHub, include = FALSE}
+write.csv(species_14_18, "Species_2014_2018.csv")
+write.csv(guilds_12_18, "Guild_2012_2018.csv")
+
+```
