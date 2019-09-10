@@ -370,29 +370,18 @@ summary {
 <h2>Creating a single <strong>GUILD LEVEL</strong> dataframe (2012-2018)</h2>
 <p>This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.</p>
 <p>To begin, we will import all of the .csv files as objects. After the data is imported, we clean each year and the compile them together into a single document.</p>
-<pre class="r"><code>guilds_12_18 &lt;- guilds_12_18 %&gt;%
-  filter(total.cover &gt; 2.5) %&gt;%
-  replace(is.na(.), 0) %&gt;%
-  mutate(r.exo.grass = (Exo.grass/total.cover)*100,
-         r.exo.forb = (Exo.forb/total.cover)*100,
-         r.nat.grass = (nat.grass/total.cover)*100,
-         r.nat.forb = (nat.forb/total.cover)*100,
-         Category = recode(Category, &quot;Full Mulch&quot; = &quot;Full Mulched&quot;,
-                           &quot;Full No Mulch&quot; = &quot;Full Not Mulched&quot;,
-                           &quot;Island Mulch&quot; = &quot;Island Mulched&quot;,
-                           &quot;Island Mulch &quot; = &quot;Island Mulched&quot;),
-         Mowing.treatment = recode(Mowing.treatment, &quot;Mowed &quot; = &quot;Mowed&quot;),
-         QuadLocation = recode(QuadLocation, &quot; &quot; = &quot;Full&quot;,
-                               &quot;N/A&quot; = &quot;Not recorded&quot;))
-
-write.csv(guilds_12_18, &quot;Guild_2012_2018.csv&quot;)</code></pre>
+<p>After we have a compiled dataset, there are still a few minor cleanup things that need to happen: renaming all of the catergories to be consistent, and renaming the plot IDs to be consistent.</p>
 </div>
 <div id="creating-a-single-species-level-dataframe-2014-2018" class="section level2">
 <h2>Creating a single <strong>SPECIES LEVEL</strong> dataframe (2014-2018)</h2>
 <p>Species level data was only taken in some years, so we will also produce code to generate species-level dataframes. First, we’ll import the data, and then we’ll compile it into one dataframe.</p>
+<p>These data reflect conditions in 1 CIM, 12 CFM, 14 CFNM, 15 CIM, 17 CFNM, 18 CIM, 19 CIM, 2 CFM, 22 CFM, 24 CFNM, 25 CFNM, 4 CIM, 6 CFNM, 7 CFM, 9 CFM, 13 plots.</p>
 </div>
 <div id="uploading-.csv-files-to-github" class="section level2">
 <h2>Uploading .csv files to GitHub</h2>
+<p>We will upload our cleaned data to GitHub to be called up easily.</p>
+<pre class="r"><code>write.csv(species_14_18, &quot;Species_2014_2018.csv&quot;)
+write.csv(guilds_12_18, &quot;Guild_2012_2018.csv&quot;)</code></pre>
 </div>
 
 
