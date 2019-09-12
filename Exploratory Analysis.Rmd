@@ -27,7 +27,9 @@ species_14_18 <- read.csv("Species_2014_2018.csv")
 library(tidyverse)
 library(grid)
 library(gridExtra)
-
+library(pscl)
+library(MASS)
+library(boot)
 
 # legend extractor function
 g_legend<-function(a.gplot){
@@ -47,7 +49,9 @@ Before I begin the analysis, I need to take a look at the data's structure -- th
 
 The replicated sampling unit differs for different questions. For the first question (how do treatments vary?), the replicate is a single plot, so I will average the individual samples to the plot level. Additionally, I'll need to separate forbs and grasses in the analysis, since they were planted in separate areas. I'll use "F" to denote forbs, and "G" for grasses.
 
-```{r Averaging to plot level, cache=TRUE, dependson="Setup", echo=FALSE}
+### Variables and values
+
+```{r Averaging to plot level, cache=TRUE, dependson="Setup", echo=FALSE, message=FALSE}
 
 avg_guilds <- guild_12_18 %>%
   group_by(Year, Plot, Planted.guild, Category) %>%
@@ -57,25 +61,60 @@ avg_guilds <- guild_12_18 %>%
 avg_F <- avg_guilds %>%
   filter(Planted.guild == "Forb") %>%
   ungroup() %>%
-  select(Year, Plot, nat.forb, Category)
+  select(Year, Plot, nat.forb, Category) %>%
+  rename(Cover = nat.forb) %>%
+  mutate(guild = "forb")
 summary(avg_F)
 
 avg_G <- avg_guilds %>%
   filter(Planted.guild == "Grass") %>%
-  select(Year, Plot, nat.grass, Category)
-summary(avg_G)
+  ungroup() %>%
+  select(Year, Plot, nat.grass, Category) %>%
+  rename(Cover = nat.grass) %>%
+  mutate(guild = "grass")
 
-remove(avg_guilds)
+avg_guilds <- full_join(avg_F, avg_G)
+str(avg_guilds)
+
 ```
 
-Clearly, some of the data are missing (there should be 15 plots, 5 per category x 7 year = 35 plots per category). All ofn the missing plots are due to errors in the 2014 dataset. We are missing 1 FNM plots (#9), 2 FNM plots (#14, 25), and 2 IM plots (#15, 19).  
-There's unfortunately nothing I can do about this -- *will need to ask Karen about it, perhaps there is still hard copy data somewhere on file?*
+Clearly, some of the data are missing (there should be 15 plots, 5 per category x 7 years = 35 plots per category). All of the missing plots are due to the 2014 dataset missing values. We are missing 1 FNM plot (#9), 2 FNM plots (#14, 25), and 2 IM plots (#15, 19), all from the 2014 dataset.  
+There's unfortunately nothing I can do about this -- *ask Karen about it, perhaps there is still hard copy data somewhere on file? Alternatively, we may not care, if most analyses are interested in comparisons in 2018.*  
 
+Let's take a look at the histogram of the data, since we're fairly certain it's nowhere near normal:
 
+```{r Histogram, echo=FALSE, dependson="Averaging to plot level"}
+
+ggplot(avg_guilds, aes(Cover, fill=Category)) +
+  geom_histogram()
+
+hist(avg_guilds$Cover)
+
+```
+
+Yep, about as "normal" as we expected. Clearly, we have a zero-heavy dataset. Let's check the dispersion.
+
+### Dispersion and Variance
+In order to know what type of statistical model to use for our data, we need to know how overdispersed the data is. Generally, data is considered "overdispersed" when *d* (the ratio of the variance over the mean of the data). We can find the dispersion index for this data pretty easily:
+
+```{r Dispersion, cache=TRUE, dependson="Averaging to plot level"}
+
+disp <- avg_guilds %>%
+  summarise(mean = mean(Cover),
+            var = var(Cover)) %>%
+  mutate(d = var/mean)
+
+disp
+
+```
+
+Very clearly, we need to use a model that best handles a large number of zeroes and overdispersed data: a zero-inflated negative bionomial distribution. A normal ANOVA is not robust against the overdispersion and zero-inflation in our data.
+.  
+.  
 ## Question 1: 
 **1. Do island-planted plots have the same native cover as full-planted plots after 6 years?, and Will island planted plots spread outside of their planted areas?**  
 
-The cover of native and exotic species was fairly similar across all three treatments over time.  
+The cover of native species was fairly similar across all three treatments over time.  
   
 ```{r Formatting & graphing guild-level data, echo=FALSE, cache=TRUE, dependson="Setup"}
 
@@ -160,95 +199,47 @@ AllYrGrass <- ggplot(Grass_all, aes (x = Year,  y = mean.cov, color = Category, 
   scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
   scale_x_continuous(breaks = seq(2012, 2018, 1))
 
-# ---- Exo Grass ---- 
-ExoGrass_all <- guild_12_18 %>%
-  group_by(Category, Year) %>%
-  summarise(mean.cov = mean(r.exo.grass),
-            std.err = sd(r.exo.grass)/sqrt(sum(!is.na(r.exo.grass))))
-ExoGrass_all$Year <- as.numeric(ExoGrass_all$Year)
-
-AllYrEGrass <- ggplot(ExoGrass_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
-  geom_line () +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = mean.cov - std.err, 
-                    ymax = mean.cov + std.err),
-                width=0.2) +
-  scale_color_manual(values = colors3,
-                     name = "Plot Treatment") +
-  scale_shape_manual(values = c(1, 2, 4, 5, 6),
-                     name = "Plot Treatment") +
-  labs(title = "",
-       y = "Relative Exotic \n Grass Cover (%)",
-       x = "Year") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.y = element_text(colour="black", size = 10),
-        axis.title.y = element_text(colour="black", size = 12),
-        axis.ticks.y = element_line(colour = "black"),
-        axis.text.x = element_text(colour="black", size = 10),
-        axis.title.x = element_text(colour="black", size = 12),
-        axis.ticks.x = element_line(colour = "black"),
-        legend.position ="bottom",
-        plot.title = element_text(hjust = 0.5)) +
-  coord_cartesian(ylim = c(0, 70)) +
-  scale_y_continuous(breaks = seq(0, 70, 10), expand = c(0,0)) +
-  scale_x_continuous(breaks = seq(2012, 2018, 1))
-
-
-# ---- Exo Forbs ---- 
-ExoForb_all <- guild_12_18 %>%
-  group_by(Category, Year) %>%
-  summarise(mean.cov = mean(r.exo.forb),
-            std.err = sd(r.exo.forb)/sqrt(sum(!is.na(r.exo.forb))))
-ExoForb_all$Year <- as.numeric(ExoForb_all$Year)
-
-AllYrEForb <- ggplot(ExoForb_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
-  geom_line () +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = mean.cov - std.err, 
-                    ymax = mean.cov + std.err),
-                width=0.2) +
-  scale_color_manual(values = colors3,
-                     name = "Plot Treatment") +
-  scale_shape_manual(values = c(1, 2, 4, 5, 6),
-                     name = "Plot Treatment") +
-  labs(title = "",
-       y = "Relative Exotic \n Forb Cover (%)",
-       x = "Year") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.y = element_text(colour="black", size = 10),
-        axis.title.y = element_text(colour="black", size = 12),
-        axis.ticks.y = element_line(colour = "black"),
-        axis.text.x = element_text(colour="black", size = 10),
-        axis.title.x = element_text(colour="black", size = 12),
-        axis.ticks.x = element_line(colour = "black"),
-        legend.position ="bottom",
-        plot.title = element_text(hjust = 0.5)) +
-  coord_cartesian(ylim = c(0, 70)) +
-  scale_y_continuous(breaks = seq(0, 70, 10), expand = c(0,0)) +
-  scale_x_continuous(breaks = seq(2012, 2018, 1))
 
 AllYrLeg <- g_legend(AllYrGrass)
 
 grid.arrange(arrangeGrob(AllYrForb + theme(legend.position="none"),
                          AllYrGrass + theme(legend.position="none"),
-                         AllYrEForb + theme(legend.position="none"),
-                         AllYrEGrass + theme(legend.position="none"),
                          nrow = 2),
              AllYrLeg, nrow = 2, heights = c(12, 1))
 
 
 ```
-  
-  
-To test whether there is a significant difference between the treatments in 2018, we will likely use a zero-inflated negative binomial model.
+
+To test whether there is a signficiant difference in treatments after 7 years, we will use a zero-inflated negative binomial model. As I understand it, this type of model has two components - first, it will tell us whether the factors affect the likelihood of a zero occurring in the data, and as well as whether categories differ after accounting for differences in the likelihood of zeros. 
+
+```{r FZINB Data prep, cache = TRUE, dependson="Averaging to plot level", include=FALSE}
+avg_F <- avg_guilds %>%
+  filter(guild == "forb",
+         Year == "2018")
+avg_F$Cover <- as.integer(avg_F$Cover)
+
+```
+
+
+```{r ZINB Forbs} 
+FZINB <- zeroinfl(Cover ~ Category | Category,
+                  data = avg_F, dist="negbin")
+summary(FZINB)
+
+```
+
+According to our zero-inflated model, there is no significant effect of planting treatment on the either the likelihood of there being non-0 cover, or on the total cover of native forbs in 2018. However, we may want to compare this with a non-zero inflated model and compare their fits -- we'll use a Vuong test to make the comparison.
+
+```{r Normal NB model}
+FNB <- glm.nb(Cover ~ Category,
+                  data = avg_F)
+
+summary(FNB)
+
+vuong(FZINB, FNB)
+
+```
+
 
 
 
