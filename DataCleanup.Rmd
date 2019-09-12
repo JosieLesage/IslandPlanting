@@ -75,6 +75,17 @@ D2016$Plot <- as.factor(D2016$Plot)
 
 
 # ---- 2015 ----
+## plot 25 is labeled incorrectly, should be CFNM.
+D2015_25 <- D2015 %>%
+  filter(plot.. == "25") %>%
+  rename(Treatment2 = Treatment) %>%
+  mutate(Treatment = recode_factor(Treatment2, "Full Mulched" = "Full Not Mulched")) %>%
+  select(-Treatment2)
+
+D2015 <- D2015 %>%
+  filter(plot.. != "25") %>%
+  full_join(D2015_25)
+
 D2015 <- D2015 %>%
   replace(is.na(.), 0) %>%
   rename(Data.Collector = Data.Collectors,
@@ -94,6 +105,21 @@ D2015$Year <- as.factor(D2015$Year)
   
 # ---- 2014 ----
 ## 2014 has a lot of issues - no plots 9, 14, 15, 19, or 25.
+## Additionally, plot 18 is getting labeled incorrectly. It should be CIM. 
+
+D2014_18 <- D2014 %>%
+  filter(Plot == "18") %>%
+  rename(ID2 = ID,
+         Category2 = Category,
+         Planting.Type2 = Planting.Type) %>%
+  mutate(Category = recode_factor(Category2, "Full Mulch" = "Island Mulch"),
+         ID = recode_factor(ID2, "CFM" = "CIM"),
+         Planting.Type = recode_factor(Planting.Type2, "Full" = "Island")) %>%
+  select(-ID2, -Category2, -Planting.Type2)
+
+D2014 <- D2014 %>%
+  filter(Plot != "18") %>%
+  full_join(D2014_18)
 
 D2014 <- D2014 %>%
   mutate(Planted.guild = ifelse(Quadrant == "NE", "Grass", ifelse 
