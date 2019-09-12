@@ -7,17 +7,16 @@ output: html_document
 library(tidyverse)
 library(grid)
 library(lme4)
-
 ```
 
 
 
-## Creating a single **GUILD LEVEL** dataframe (2012-2018)
+# Creating a single **GUILD LEVEL** dataframe (2012-2018)
 
-This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.
+This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.  
 
-To begin, we will import all of the .csv files as objects. 
-After the data is imported, we clean each year and the compile them together into a single document.
+To begin, we will import all of the .csv files as objects.  
+After the data is imported, we clean each year and the compile them together into a single document.  
 
 ```{r Import guild-level, include = FALSE}
 setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
@@ -108,10 +107,6 @@ D2014$Plot <- as.factor(D2014$Plot)
 
 # ---- 2013 ----
 ## 2013 has some unique issues - plots 1 and 14 are mislabeled, and need to be fixed. We'll isolate their data, and then group them back in with the correct info. 
-
-setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
-D2013 <- read.csv("2013_BackgroundVeg.csv")
-
 D2013_14 <- D2013 %>%
   filter(Plot == "14") %>%
   rename(ID2 = ID,
