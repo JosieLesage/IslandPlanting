@@ -19,10 +19,6 @@ In addition to the suppression of weedy invasive species, native species must be
   
   
 ```{r Setup, include=FALSE}
-# data
-guild_12_18 <- read.csv("Guild_2012_2018.csv")
-species_14_18 <- read.csv("Species_2014_2018.csv")
-
 # packages
 library(tidyverse)
 library(grid)
@@ -40,6 +36,13 @@ g_legend<-function(a.gplot){
 
 # figure colors
 colors3 <- c("darkslategrey", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+
+```{r Import, include=FALSE}
+# data
+guild_12_18 <- read.csv("Guild_2012_2018.csv")
+species_14_18 <- read.csv("Species_2014_2018.csv")
 
 ```
 
@@ -116,7 +119,7 @@ Very clearly, we need to use a model that best handles a large number of zeroes 
 
 The cover of native species was fairly similar across all three treatments over time.  
   
-```{r Formatting & graphing guild-level data, echo=FALSE, cache=TRUE, dependson="Setup"}
+```{r Formatting & graphing guild-level data, echo=FALSE, cache=TRUE, dependson="Import"}
 
 Forb_all <- guild_12_18 %>%
   filter(Planted.guild == "Forb") %>%
