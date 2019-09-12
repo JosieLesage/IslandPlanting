@@ -33,7 +33,7 @@ D2012 <- read.csv("2012_BackgroundVeg.csv")
 ```
 
 
-```{r Guild-level restructure and compile, include = FALSE}
+```{r Guild-level restructure and compile, include = FALSE, cache=TRUE, dependson="Import guild-level"}
 # ---- 2018 ----
 D2018 <- D2018 %>%
   replace(is.na(.), 0) %>%
@@ -107,19 +107,36 @@ D2014$Year <- as.factor(D2014$Year)
 D2014$Plot <- as.factor(D2014$Plot)
 
 # ---- 2013 ----
+## 2013 has some unique issues - plots 1 and 14 are mislabeled, and need to be fixed. We'll isolate their data, and then group them back in with the correct info. 
+
+setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
+D2013 <- read.csv("2013_BackgroundVeg.csv")
+
+D2013_14 <- D2013 %>%
+  filter(Plot == "14") %>%
+  rename(ID2 = ID,
+         Treatment2 = Treatment) %>%
+  mutate(ID = recode_factor(ID2, "Island Not Mulched" = "Full Not Mulched"),
+            Treatment = recode_factor(Treatment2, "Island" = "Full")) %>%
+  select(-ID2, -Treatment2)
+
+D2013 <- D2013 %>%
+  filter(Plot != "14") %>%
+  full_join(D2013_14)
+
 D2013 <- D2013 %>%
   mutate(Year = "2013") %>%
   filter(Treatment != "Seeded",
          Plot != "13") %>%
-  mutate(Category = ifelse(Treatment.Mulch == "IPNM", "Island Not Mulched", 
-                           ifelse (Treatment.Mulch == "FPNM", "Full Not Mulched", 
-                                   ifelse(Treatment.Mulch == "IPM", "Island Mulched",
-                                          ifelse(Treatment.Mulch == "FPM", "Full Mulched", "WRONG")))),
+  mutate(Category = ifelse(ID == "Island Not Mulched", "Island Not Mulched", 
+                           ifelse (ID == "Full Not Mulched", "Full Not Mulched", 
+                                   ifelse(ID == "Island Mulched", "Island Mulched",
+                                          ifelse(ID == "Full Mulched", "Full Mulched", "WRONG")))),
          Planting.Type = ifelse(Treatment == "Full", "Full",
                                 ifelse(Treatment == "Island", "Island", "WRONG")),
          QuadLocation = ifelse(Planting.Type == "Full", "Full", 
                                ifelse(Planting.Type == "Island", "Not recorded", "WRONG")),
-         Mow = ifelse(Mow =="Mow", "Mowed",
+         Mow = ifelse(Mow == "Mow", "Mowed",
                       ifelse(Mow == "No Mow", "Unmowed", "WRONG"))) %>%
 rename(
     Planted.guild = Grass.or.Forb,
