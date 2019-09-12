@@ -1,14 +1,16 @@
 ---
 title: "Island Planting Project - Exploratory Analysis"
 output: word_document
+author: Josie C. Lesage
 ---
   
   
-## Background
+# Background
 Restoration must balance limited resources towards the most effective outcomes, given specified targets. Removing and suppressing invasive vegetation can give introduced native species the opportunity to establish. There are a variety of techniques used to help native species establish by suppressing weeds. Initially, laying mulch can reduce the cover of weedy species. However, it is less clear how much this initial benefit affects long-term success and native cover, or whether un-mulched areas will “catch up” with mulched plots once species establish. Annual mowing is another technique that can be used to reduce invasive species cover, and therefore potentially benefit native species.  
   
 In addition to the suppression of weedy invasive species, native species must be reintroduced to the system. The nucleation model of succession may provide insight into a technique to successfully restore system with reduced resource inputs. By planting target species in clumps (“islands”) as opposed to throughout the plot, we may effectively restore areas with reduced inputs. After multiple years of growth and spread, the native islands may expand, resulting over the long term in similar levels of native species cover with a lower up-front resource investment.  
-  
+
+### Questions
 **This study addresses the following questions:**  
 1. Will island-planted plots have the same native cover as full-planted plots after several years?, and Will island planted plots spread outside of their planted areas?  
 2. Does annual mowing benefit native species cover for either grasses or forbs?  
@@ -19,7 +21,7 @@ In addition to the suppression of weedy invasive species, native species must be
 ```{r Setup, include=FALSE}
 # data
 guild_12_18 <- read.csv("Guild_2012_2018.csv")
-species_12_18 <- read.csv("Species_2014_2018.csv")
+species_14_18 <- read.csv("Species_2014_2018.csv")
 
 # packages
 library(tidyverse)
@@ -39,12 +41,43 @@ colors3 <- c("darkslategrey", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072
 
 ```
 
+# Data Structure  
+
+Before I begin the analysis, I need to take a look at the data's structure -- the data is certainly zero-inflated, but is it over-dispersed? A look at the data structure will help me select the best model for the data.  
+
+The replicated sampling unit differs for different questions. For the first question (how do treatments vary?), the replicate is a single plot, so I will average the individual samples to the plot level. Additionally, I'll need to separate forbs and grasses in the analysis, since they were planted in separate areas. I'll use "F" to denote forbs, and "G" for grasses.
+
+```{r Averaging to plot level, cache=TRUE, dependson="Setup", echo=FALSE}
+
+avg_guilds <- guild_12_18 %>%
+  group_by(Year, Plot, Planted.guild, Category) %>%
+  summarise(nat.forb = mean(nat.forb),
+            nat.grass = mean(nat.grass))
+  
+avg_F <- avg_guilds %>%
+  filter(Planted.guild == "Forb") %>%
+  ungroup() %>%
+  select(Year, Plot, nat.forb, Category)
+summary(avg_F)
+
+avg_G <- avg_guilds %>%
+  filter(Planted.guild == "Grass") %>%
+  select(Year, Plot, nat.grass, Category)
+summary(avg_G)
+
+remove(avg_guilds)
+```
+
+Clearly, some of the data are missing (there should be 15 plots, 5 per category x 7 year = 35 plots per category). All ofn the missing plots are due to errors in the 2014 dataset. We are missing 1 FNM plots (#9), 2 FNM plots (#14, 25), and 2 IM plots (#15, 19).  
+There's unfortunately nothing I can do about this -- *will need to ask Karen about it, perhaps there is still hard copy data somewhere on file?*
+
+
 ## Question 1: 
 **1. Do island-planted plots have the same native cover as full-planted plots after 6 years?, and Will island planted plots spread outside of their planted areas?**  
 
 The cover of native and exotic species was fairly similar across all three treatments over time.  
   
-```{r Formatting & graphing guild-level data, echo=FALSE, cache = TRUE, dependson = "Setup"}
+```{r Formatting & graphing guild-level data, echo=FALSE, cache=TRUE, dependson="Setup"}
 
 Forb_all <- guild_12_18 %>%
   filter(Planted.guild == "Forb") %>%
