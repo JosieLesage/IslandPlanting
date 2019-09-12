@@ -1,6 +1,6 @@
 ---
 title: "Island Planting Project - Exploratory Analysis"
-output: html_document
+output: word_document
 ---
   
   
@@ -40,11 +40,11 @@ colors3 <- c("darkslategrey", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072
 ```
 
 ## Question 1: 
-**1. Will island-planted plots have the same native cover as full-planted plots after several years?, and Will island planted plots spread outside of their planted areas?**  
+**1. Do island-planted plots have the same native cover as full-planted plots after 6 years?, and Will island planted plots spread outside of their planted areas?**  
 
-To address this question, I graphed native and exotic guild cover in three treatment plots over time:
+The cover of native and exotic species was fairly similar across all three treatments over time.  
   
-```{r Formatting guild-level data, echo=FALSE}
+```{r Formatting & graphing guild-level data, echo=FALSE, cache = TRUE, dependson = "Setup"}
 
 Forb_all <- guild_12_18 %>%
   filter(Planted.guild == "Forb") %>%
@@ -214,6 +214,14 @@ grid.arrange(arrangeGrob(AllYrForb + theme(legend.position="none"),
 
 ```
   
+  
+To test whether there is a significant difference between the treatments in 2018, we will likely use a zero-inflated negative binomial model.
+
+
+
    
-   
-   
+## Question 2: Does annual mowing benefit native species cover for either grasses or forbs?  
+
+## Question 3: Does mulching affect native cover in the long-term/how long does the mulching effect last?  
+  
+## Question 4: Of the species planted, which were most successful in the long term? 
