@@ -1,7 +1,6 @@
 ---
 title: "Island Planting Project - Exploratory Analysis"
 output: word_document
-author: Josie C. Lesage
 ---
   
   
@@ -20,12 +19,12 @@ In addition to the suppression of weedy invasive species, native species must be
   
 ```{r Setup, include=FALSE}
 # packages
-library(tidyverse)
 library(grid)
 library(gridExtra)
 library(pscl)
 library(MASS)
 library(boot)
+library(tidyverse)
 
 # legend extractor function
 g_legend<-function(a.gplot){
@@ -48,14 +47,16 @@ species_14_18 <- read.csv("Species_2014_2018.csv")
 
 # Data Structure  
 
-Before I begin the analysis, I need to take a look at the data's structure -- the data is certainly zero-inflated, but is it over-dispersed? A look at the data structure will help me select the best model for the data.  
+Before I begin the analysis, I need to take a look at the data's structure -- the data is certainly zero-inflated, but is it over-dispersed? A look at the data structure will help me select the best model for the data. I'll base this on the guide in Appendix A of **Mixed effects models and extensions in ecology with R: appendix walkthrough**.
 
 The replicated sampling unit differs for different questions. For the first question (how do treatments vary?), the replicate is a single plot, so I will average the individual samples to the plot level. Additionally, I'll need to separate forbs and grasses in the analysis, since they were planted in separate areas. I'll use "F" to denote forbs, and "G" for grasses.
 
-### Variables and values
+## Selecting Revelant Data
+We have only 2 remaining datacleanup steps before we can examine the data structure:
+1. we need to look at forbs only in the forb planted plots, and only grass in the grass planted plots. 
+2. we need to average the cover of each guild over the multiple samples from a single plot. 
 
 ```{r Averaging to plot level, cache=TRUE, dependson="Setup", echo=FALSE, message=FALSE}
-
 avg_guilds <- guild_12_18 %>%
   group_by(Year, Plot, Planted.guild, Category) %>%
   summarise(nat.forb = mean(nat.forb),
@@ -64,15 +65,16 @@ avg_guilds <- guild_12_18 %>%
 avg_F <- avg_guilds %>%
   filter(Planted.guild == "Forb") %>%
   ungroup() %>%
-  select(Year, Plot, nat.forb, Category) %>%
+  dplyr::select(Year, Plot, nat.forb, Category) %>%
   rename(Cover = nat.forb) %>%
   mutate(guild = "forb")
 summary(avg_F)
+str(avg_F)
 
 avg_G <- avg_guilds %>%
   filter(Planted.guild == "Grass") %>%
   ungroup() %>%
-  select(Year, Plot, nat.grass, Category) %>%
+  dplyr::select(Year, Plot, nat.grass, Category) %>%
   rename(Cover = nat.grass) %>%
   mutate(guild = "grass")
 
@@ -82,26 +84,22 @@ str(avg_guilds)
 ```
 
 Clearly, some of the data are missing (there should be 15 plots, 5 per category x 7 years = 35 plots per category). All of the missing plots are due to the 2014 dataset missing values. We are missing 1 FNM plot (#9), 2 FNM plots (#14, 25), and 2 IM plots (#15, 19), all from the 2014 dataset.  
-There's unfortunately nothing I can do about this -- *ask Karen about it, perhaps there is still hard copy data somewhere on file? Alternatively, we may not care, if most analyses are interested in comparisons in 2018.*  
+There's unfortunately nothing I can do about this -- *Perhaps there is still hard copy data somewhere on file? Alternatively, we may not care, if most analyses are interested in comparisons in 2018.*  
 
+## Histogram and dispersion
 Let's take a look at the histogram of the data, since we're fairly certain it's nowhere near normal:
 
 ```{r Histogram, echo=FALSE, dependson="Averaging to plot level"}
-
 ggplot(avg_guilds, aes(Cover, fill=Category)) +
   geom_histogram()
 
 hist(avg_guilds$Cover)
-
 ```
 
-Yep, about as "normal" as we expected. Clearly, we have a zero-heavy dataset. Let's check the dispersion.
-
-### Dispersion and Variance
+Yep, about as "normal" as we expected. Clearly, we have a zero-heavy dataset.  
 In order to know what type of statistical model to use for our data, we need to know how overdispersed the data is. Generally, data is considered "overdispersed" when *d* (the ratio of the variance over the mean of the data). We can find the dispersion index for this data pretty easily:
 
 ```{r Dispersion, cache=TRUE, dependson="Averaging to plot level"}
-
 disp <- avg_guilds %>%
   summarise(mean = mean(Cover),
             var = var(Cover)) %>%
@@ -111,9 +109,32 @@ disp
 
 ```
 
-Very clearly, we need to use a model that best handles a large number of zeroes and overdispersed data: a zero-inflated negative bionomial distribution. A normal ANOVA is not robust against the overdispersion and zero-inflation in our data.
+Very clearly, we need to use a model that can handles a large number of zeroes and overdispersed data, but we're also working with proportion data -- not counts! So a zero-inflated negative binomial is probably not the best choice. A normal ANOVA is not robust against the overdispersion and zero-inflation in our data.
 .  
-.  
+
+# Appendix A guidelines
+**Mixed effects models and extensions in ecology with R** has an appendix with a handy data-structure guide, so it's valuable to take a look at our data through their guide.
+
+
+### A.2.1: Outliers
+
+```{r Outlier Check, echo=FALSE}
+op <- par(mfrow = c(2, 2), mar = c(3, 3, 3, 1), yaxt = "n")
+dotchart(guild_12_18$Exo.grass, groups = guild_12_18$Category, main = "Exo.grass")
+dotchart(guild_12_18$Exo.forb, groups = guild_12_18$Category, main = "Exo.forbs")
+dotchart(guild_12_18$nat.grass, groups = guild_12_18$Category, main = "Nat.grass")
+dotchart(guild_12_18$nat.forb, groups = guild_12_18$Category, main = "Nat.forb")
+par(op)
+
+```
+  
+Clearly, there's one outlier for exotic forb cover. Since our analyses might not deal with that, we can probably leave it in for now.  
+
+### A.2.2: Collinearity
+
+
+
+
 ## Question 1: 
 **1. Do island-planted plots have the same native cover as full-planted plots after 6 years?, and Will island planted plots spread outside of their planted areas?**  
 
@@ -121,15 +142,14 @@ The cover of native species was fairly similar across all three treatments over 
   
 ```{r Formatting & graphing guild-level data, echo=FALSE, cache=TRUE, dependson="Import"}
 
-Forb_all <- guild_12_18 %>%
-  filter(Planted.guild == "Forb") %>%
+Forb_all <- avg_F %>%
   group_by(Category, Year) %>%
-  summarise(mean.cov = mean(r.nat.forb),
-            std.err = sd(r.nat.forb)/sqrt(sum(!is.na(r.nat.forb))))
+  summarise(mean.cov = mean(cover),
+            std.err = sd(cover)/sqrt(sum(!is.na(cover))))
 Forb_all$Year <- as.numeric(Forb_all$Year)
 
 
-AllYrForb<- ggplot(Forb_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
+AllYrForb <- ggplot(Forb_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
   geom_line () +
   geom_point(size = 3) +
   geom_errorbar(aes(ymin = mean.cov - std.err, 
@@ -157,17 +177,15 @@ AllYrForb<- ggplot(Forb_all, aes (x = Year,  y = mean.cov, color = Category, sha
         plot.title = element_text(hjust = 0.5),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 45)) +
-  scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
+  coord_cartesian(ylim = c(0, 4500)) +
+  scale_y_continuous(breaks = seq(0, 4500, 500), expand = c(0,0)) +
   scale_x_continuous(breaks = seq(2012, 2018, 1))
 
-
 # ---- Native Grasses ----
-Grass_all <- guild_12_18 %>%
-  filter(Planted.guild == "Grass") %>%
+Grass_all <- avg_G %>%
   group_by(Category, Year) %>%
-  summarise(mean.cov = mean(r.nat.grass),
-            std.err = sd(r.nat.grass)/sqrt(sum(!is.na(r.nat.grass))))
+  summarise(mean.cov = mean(cover),
+            std.err = sd(cover)/sqrt(sum(!is.na(cover))))
 Grass_all$Year <- as.numeric(Grass_all$Year)
 
 AllYrGrass <- ggplot(Grass_all, aes (x = Year,  y = mean.cov, color = Category, shape = Category)) +
@@ -198,8 +216,8 @@ AllYrGrass <- ggplot(Grass_all, aes (x = Year,  y = mean.cov, color = Category, 
         plot.title = element_text(hjust = 0.5),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 45)) +
-  scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
+  coord_cartesian(ylim = c(0, 4500)) +
+  scale_y_continuous(breaks = seq(0, 4500, 500), expand = c(0,0)) +
   scale_x_continuous(breaks = seq(2012, 2018, 1))
 
 
@@ -223,27 +241,43 @@ avg_F$Cover <- as.integer(avg_F$Cover)
 
 ```
 
+### Old work -- Zero inflated models?
 
-```{r ZINB Forbs} 
-FZINB <- zeroinfl(Cover ~ Category | Category,
-                  data = avg_F, dist="negbin")
-summary(FZINB)
+
+```{r ZINB Forbs}
+avg_F_2018 <- avg_F %>%
+  filter(Year == "2018")
+
+FZINB_Cover <- zeroinfl(Cover ~ Category | Category,
+                  data = avg_F_2018, dist="negbin")
+summary(FZINB_Cover)
+
 
 ```
 
-According to our zero-inflated model, there is no significant effect of planting treatment on the either the likelihood of there being non-0 cover, or on the total cover of native forbs in 2018. However, we may want to compare this with a non-zero inflated model and compare their fits -- we'll use a Vuong test to make the comparison.
+According to our zero-inflated model, there is no significant effect of planting treatment on the likelihood of there being non-0 cover, or an effect on the total quantity of native forbs in 2018. However, we may want to compare this with a non-zero inflated model and compare their fits -- we'll use a Vuong test to make the comparison.
 
 ```{r Normal NB model}
 FNB <- glm.nb(Cover ~ Category,
-                  data = avg_F)
+                  data = avg_F_2018)
 
 summary(FNB)
 
-vuong(FZINB, FNB)
+vuong(FZINB_Cover, FNB)
+
+```
+
+#### Parameter Estimation through Bootstrapping
+
+```{r ZINB Forbs Parameters}
 
 ```
 
 
+
+### Grasses  
+.  
+.  
 
 
    
