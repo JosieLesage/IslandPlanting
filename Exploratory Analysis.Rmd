@@ -21,11 +21,8 @@ In addition to the suppression of weedy invasive species, native species must be
 # packages
 library(grid)
 library(gridExtra)
-library(pscl)
-library(MASS)
-library(boot)
 library(tidyverse)
-library(nlme)
+library(boot)
 
 # legend extractor function
 g_legend<-function(a.gplot){
@@ -82,7 +79,13 @@ avg_G <- avg_guilds %>%
   mutate(guild = "grass")
 
 avg_guilds <- full_join(avg_F, avg_G) %>%
-  mutate(Cover = (Cover/100))
+  mutate(Cover = (Cover/100),
+         Planting = ifelse(Category == "Full Mulched", "Full", 
+                           ifelse(Category == "Full Not Mulched", "Full",
+                                   ifelse(Category == "Island Mulched", "Island", "WRONG"))),
+         Mulch = ifelse(Category == "Full Mulched", "Mulch", 
+                           ifelse(Category == "Full Not Mulched", "No Mulch",
+                                   ifelse(Category == "Island Mulched", "Mulch", "WRONG"))))
 str(avg_guilds)
 
 ```
@@ -141,8 +144,10 @@ boxplot(Cover ~ factor(guild), varwidth = TRUE,
 From the first boxplot of categories, it is fairly clear that the heterogeneity rules are being broken.
 
 # Results
-## Question 1: 
-**1. Do island-planted plots have the same native cover as full-planted plots after 6 years?, and Will island planted plots spread outside of their planted areas?**  
+## Questions 1, 2, & 3: 
+**1. Do island-planted plots have the same native cover as full-planted plots after 6 years?  
+2. Does mulching affect native cover in the long-term/how long does the mulching effect last?  
+3. Does annual mowing benefit native species cover for either grasses or forbs?**
 
 The cover of native species was fairly similar across all three treatments over time.  
   
@@ -244,40 +249,118 @@ I am running a generalized linear model with a quasibinomial structure, given th
 
 We also suspect that our data do not have homogeneous variance, so we will allow flexible variance.
 
-```{r Forb GLM 2018, echo=FALSE, dependson="Averaging to plot level"}
+```{r GLM 2018, echo=FALSE, dependson="Averaging to plot level"}
 F2018 <- avg_guilds %>%
   filter(guild == "forb",
          Year == "2018")
 F2018$Category <- as.factor(F2018$Category)
+F2018$Mulch <- as.factor(F2018$Mulch)
+F2018$Mowing.treatment <- as.factor(F2018$Mowing.treatment)
+F2018$Planting <- as.factor(F2018$Planting)
 
-F_GLM_quasi <- glm(Cover ~ Category, family = quasibinomial, 
+F18_GLM_quasi <- glm(Cover ~ Planting * Mowing.treatment * Mulch, family = quasibinomial, 
                    data = F2018)
-summary(F_GLM_quasi)
+summary(F18_GLM_quasi)
+anova(F18_GLM_quasi, test = "Chisq")
+
+G2018 <- avg_guilds %>%
+  filter(guild == "grass",
+         Year == "2018")
+G2018$Category <- as.factor(G2018$Category)
+G2018$Mulch <- as.factor(G2018$Mulch)
+G2018$Mowing.treatment <- as.factor(G2018$Mowing.treatment)
+G2018$Planting <- as.factor(G2018$Planting)
+
+G18_GLM_quasi <- glm(Cover ~ Planting * Mowing.treatment * Mulch, family = quasibinomial, 
+                   data = G2018)
+summary(G18_GLM_quasi)
+anova(G18_GLM_quasi)
+```
 
 
+### Checking the residuals
+```{r Residual check, dependson="GLM 2018", echo=FALSE}
+
+op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
+plot(F18_GLM_quasi, add.smooth = FALSE, which = 1)
+res_F18 <-resid(F18_GLM_quasi)
+hist(res_F18, xlab = "Residuals", main = "")
+plot(x = F2018$Cover, y = res_F18, 
+     xlab = "Cover", ylab = "Residuals")
+plot(F2018$Planting, res_F18, 
+     xlab = "Planting", ylab = "Residuals")
+plot(F2018$Mulch, res_F18, 
+     xlab = "Mulch", ylab = "Residuals")
+plot(F2018$Mowing.treatment, res_F18, 
+     xlab = "Mowing treatment", ylab = "Residuals")
+par(op)
+glm.diag.plots(F18_GLM_quasi)
+
+op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
+plot(G18_GLM_quasi, add.smooth = FALSE, which = 1)
+res_G18 <-resid(G18_GLM_quasi)
+hist(res_G18, xlab = "Residuals", main = "")
+plot(x = G2018$Cover, y = res_G18, 
+     xlab = "Cover", ylab = "Residuals")
+plot(G2018$Planting, res_G18, 
+     xlab = "Planting", ylab = "Residuals")
+plot(G2018$Mulch, res_G18, 
+     xlab = "Mulch", ylab = "Residuals")
+plot(G2018$Mowing.treatment, res_G18, 
+     xlab = "Mowing treatment", ylab = "Residuals")
+par(op)
+glm.diag.plots(G18_GLM_quasi)
 
 
 ```
-### Checking the residuals
-```{r Residual check, dependson="Forb GLM 2018", echo=FALSE}
 
-op <- par(mfrow = c(2, 2), mar = c(5, 4, 1, 2))
+### Curiosity about 2017
+I'm curious what happens for the 2017 data, since it seems much clearer that there's an effect of mulching/planting style.
+
+```{r 2017 Forb data, echo = FALSE}
+F2017 <- avg_guilds %>%
+  filter(guild == "forb",
+         Year == "2017")
+F2017$Mulch <- as.factor(F2017$Mulch)
+F2017$Mowing.treatment <- as.factor(F2017$Mowing.treatment)
+F2017$Planting <- as.factor(F2017$Planting)
+
+F17_GLM_quasi <- glm(Cover ~ Planting * Mowing.treatment * Mulch, family = quasibinomial, 
+                   data = F2017)
+summary(F17_GLM_quasi)
+anova(F17_GLM_quasi)
+
+op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
 plot(F_GLM_quasi, add.smooth = FALSE, which = 1)
-res <-resid(F_GLM_quasi)
+res_F17 <-resid(F_GLM_quasi)
 hist(res, xlab = "Residuals", main = "")
-plot(x = F2018$Cover, y = res, 
+plot(x = F2017$Cover, y = res, 
      xlab = "Cover", ylab = "Residuals")
-plot(F2018$Category, res, 
-     xlab = "Category", ylab = "Residuals")
+plot(F2017$Planting, res, 
+     xlab = "Planting", ylab = "Residuals")
+plot(F2017$Mulch, res, 
+     xlab = "Mulch", ylab = "Residuals")
+plot(F2017$Mowing.treatment, res, 
+     xlab = "Mowing treatment", ylab = "Residuals")
 par(op)
 
-```
 
+```
 
 
    
-## Question 2: Does annual mowing benefit native species cover for either grasses or forbs?  
-
-## Question 3: Does mulching affect native cover in the long-term/how long does the mulching effect last?  
   
-## Question 4: Of the species planted, which were most successful in the long term? 
+## Question 4: Did the cover in island planted plots spread outside of the planted areas?
+
+First, we need to create a dataframe of the island planted sections vs. the full sections for only 2018.
+
+```{r In/Edge/Out/Full dataframe, echo=FALSE}
+avg_spread_18 <- guild_12_18 %>%
+  group_by(Year, Plot, QuadLocation, Planted.guild, Category, Mowing.treatment) %>%
+  summarise(nat.forb = mean(nat.forb),
+            nat.grass = mean(nat.grass))
+
+
+```
+
+
