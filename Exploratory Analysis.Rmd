@@ -454,7 +454,8 @@ df_plot_F <- avg_guilds %>%
   group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
   summarise(meancov = mean(Cover),
             se = (var(Cover)/(length(Cover)))) %>%
-  filter(guild == "forb") %>%
+  filter(guild == "forb",
+         Year != "2012") %>%
   unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
 df_plot_F$Treatment <-factor (df_plot_F$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
                                                               "Full No Mulch Mowed", "Full No Mulch Unmowed", 
@@ -495,7 +496,8 @@ df_plot_G <- avg_guilds %>%
   group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
   summarise(meancov = mean(Cover),
             se = (var(Cover)/(length(Cover)))) %>%
-  filter(guild == "grass") %>%
+  filter(guild == "grass",
+         Year != "2012") %>%
   unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
 df_plot_G$Treatment <-factor (df_plot_G$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
                                                               "Full No Mulch Mowed", "Full No Mulch Unmowed", 
