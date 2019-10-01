@@ -8,12 +8,11 @@ output: word_document
 library(grid)
 library(gridExtra)
 library(tidyverse)
-library(boot)
-library(pscl)
-library(lmtest)
-library(broom)
+library(cowplot)
 library(betareg)
-library(AICcmodavg)
+library(emmeans)
+library(plotrix)
+
 
 # legend extractor function
 g_legend<-function(a.gplot){
@@ -22,9 +21,13 @@ g_legend<-function(a.gplot){
   legend <- tmp$grobs[[leg]]
   return(legend)}
 
-# figure colors
-colors6 <- c("#6a3d9a", "#6a3d9a", "#33a02c", "#33a02c", "#f46d43", "#f46d43")
-colors4 <- c("red", "pink", "orange", "purple")
+# figure colors, shapes, and lines
+colors6 <- c("grey0", "grey0", "grey35", "grey35", "grey60", "grey60", "grey90")
+color5 <- c("grey0", "grey25", "grey50", "grey75", "grey99")
+colors4 <- c("grey0", "grey 25", "grey 60", "purple")
+shapes3 <- c(15, 17, 19)
+shapes6 <- c(15, 0, 17, 2, 19, 1)
+lines6<- c("solid", "solid", "dotted", "dotted", "dashed", "dashed", "solid")
 
 ```
 
@@ -90,19 +93,25 @@ avg_guilds <- full_join(avg_F, avg_G) %>%
                                    ifelse(Category == "Island Mulched", "Island", "WRONG"))),
          Mulch = ifelse(Category == "Full Mulched", "Mulch", 
                            ifelse(Category == "Full Not Mulched", "No Mulch",
-                                   ifelse(Category == "Island Mulched", "Mulch", "WRONG"))))
+                                   ifelse(Category == "Island Mulched", "Mulch", "WRONG"))),
+         Planting1 = Planting,
+         Mulch1 = Mulch,
+         Mowing.treatment1 = Mowing.treatment) %>%
+  unite("Planting1", "Mulch1", "Mowing.treatment1", col = "Treatment", sep = " ")
 
 avg_guilds_prop <- avg_guilds %>%
   mutate(Cover = (Cover/100))
 
-avg_guilds$Year <- as.factor(avg_guilds$Year)
-avg_guilds$Planting <- as.factor(avg_guilds$Planting)
-avg_guilds$Mulch <- as.factor(avg_guilds$Mulch)
-avg_guilds$guild <- as.factor(avg_guilds$guild)
-avg_guilds$Cover <- as.integer(avg_guilds$Cover)
+remove(avg_F)
+remove(avg_G)
 
-str(avg_guilds)
-summary(avg_guilds)
+avg_guilds_prop$Year <- as.factor(avg_guilds_prop$Year)
+avg_guilds_prop$Planting <- as.factor(avg_guilds_prop$Planting)
+avg_guilds_prop$Mulch <- as.factor(avg_guilds_prop$Mulch)
+avg_guilds_prop$guild <- as.factor(avg_guilds_prop$guild)
+
+str(avg_guilds_prop)
+summary(avg_guilds_prop)
 
 ```
 
@@ -148,7 +157,7 @@ disp_prop
 Unfortunately, our data is very much overdispersed if we treat it an integer, as d>1, and d tends to vary across groups.  
 However, we may get away with the beta distribution for our cover data if we leave it bounded between 0 and 1. 
 
-We need to use a model that can handle the quirks of our data: heavily skewed, an unbalanced comparison, and probably heteroscedastic. A zero-inflated negative binomial is probably our best choice, but we can explore the beta distribution as well.
+We need to use a model that can handle the quirks of our data: heavily skewed, an unbalanced comparison, and probably heteroscedastic. We'll use a beta distribution, which can tolerate that kind of nonsense quite well.
 
 ### A.2.1: Outliers
 **Mixed effects models and extensions in ecology with R** suggests using dot plots to check for outliers:  
@@ -193,209 +202,13 @@ From the first boxplot of categories, it is fairly clear that the heterogeneity 
 2. Does mulching affect native cover in the long-term/how long does the mulching effect last?  
 3. Does annual mowing benefit native species cover for either grasses or forbs?**  
 .  
-First: I tested created and compared a zero-inflated poisson and zero-inflated negative binomial model, and the clear winner was the ZINB model.
 
-### Zero-inflated glm with ZINB
-```{r GLM Forbs 2018, echo=FALSE, dependson="Averaging to plot level"}
-F2018 <- avg_guilds %>%
-  filter(guild == "forb",
-         Year == "2018")
-F2018$Category <- as.factor(F2018$Category)
-F2018$Mulch <- as.factor(F2018$Mulch)
-F2018$Mowing.treatment <- as.factor(F2018$Mowing.treatment)
-F2018$Planting <- as.factor(F2018$Planting)
-
-F18_ZIP <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch  | Planting * Mowing.treatment + Mulch,
-               data = F2018, dist = "poisson")
-
-F18_ZINB <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch | Planting * Mowing.treatment + Mulch,
-               data = F2018, dist = "negbin")
-
-#compare ZIP and ZINB
-lrtest(F18_ZIP, F18_ZINB)
-
-# Results of the ZINB model
-summary(F18_ZINB)
-```
-
-At this point, it is clear from the model that there are no impacts of these factors in the long run. 
-
-
-```{r GLM Grasses 2018, echo=FALSE, dependson="Averaging to plot level"}
-G2018 <- avg_guilds %>%
-  filter(guild == "grass",
-         Year == "2018")
-G2018$Category <- as.factor(G2018$Category)
-G2018$Mulch <- as.factor(G2018$Mulch)
-G2018$Mowing.treatment <- as.factor(G2018$Mowing.treatment)
-G2018$Planting <- as.factor(G2018$Planting)
-
-G18_ZIP <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch  | Planting * Mowing.treatment + Mulch,
-               data = G2018, dist = "poisson")
-
-G18_ZINB <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch | Planting * Mowing.treatment + Mulch,
-               data = G2018, dist = "negbin")
-
-#compare ZIP and ZINB
-lrtest(G18_ZIP, G18_ZINB)
-
-# Results of the ZINB model
-summary(G18_ZINB)
-
-## Mulching appears significant, we'll test the model without mulching.
-
-```
-
-
-#### Checking the residuals
-```{r Residual check, dependson="GLM 2018", echo=FALSE}
-
-op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
-plot(F18_GLM_quasi, add.smooth = FALSE, which = 1)
-res_F18 <-resid(F18_GLM_quasi)
-hist(res_F18, xlab = "Residuals", main = "")
-plot(x = F2018$Cover, y = res_F18, 
-     xlab = "Cover", ylab = "Residuals")
-plot(F2018$Planting, res_F18, 
-     xlab = "Planting", ylab = "Residuals")
-plot(F2018$Mulch, res_F18, 
-     xlab = "Mulch", ylab = "Residuals")
-plot(F2018$Mowing.treatment, res_F18, 
-     xlab = "Mowing treatment", ylab = "Residuals")
-par(op)
-glm.diag.plots(F18_GLM_quasi)
-
-op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
-plot(G18_GLM_quasi, add.smooth = FALSE, which = 1)
-res_G18 <-resid(G18_GLM_quasi)
-hist(res_G18, xlab = "Residuals", main = "")
-plot(x = G2018$Cover, y = res_G18, 
-     xlab = "Cover", ylab = "Residuals")
-plot(G2018$Planting, res_G18, 
-     xlab = "Planting", ylab = "Residuals")
-plot(G2018$Mulch, res_G18, 
-     xlab = "Mulch", ylab = "Residuals")
-plot(G2018$Mowing.treatment, res_G18, 
-     xlab = "Mowing treatment", ylab = "Residuals")
-par(op)
-glm.diag.plots(G18_GLM_quasi)
-```
-
-
-#### Means and Std. Err reports
-These are the calculations for the means and std. errors, to be reported in the final paper. 
-
-```{r Treatment Means+SE Calcs & plots, echo=FALSE}
-
-mean_se <- avg_guilds %>%
-  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
-  summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover))))
-
-df_plot_F <- avg_guilds %>%
-  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
-  summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover)))) %>%
-  filter(guild == "forb",
-         Year != "2012") %>%
-  unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
-df_plot_F$Treatment <-factor (df_plot_F$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
-                                                              "Full No Mulch Mowed", "Full No Mulch Unmowed", 
-                                                              "Full Mulch Mowed", "Full Mulch Unmowed"))
-
-F_meansplot <- ggplot(df_plot_F, aes (x = Year,  y = meancov*100, color = Treatment, shape = Treatment)) +
-  geom_line () +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = meancov*100 - se*100, 
-                    ymax = meancov*100 + se*100),
-                width=0.2) +
-  scale_color_manual(values = colors6,
-                    name = "Plot Treatment") +
-  scale_shape_manual(values = c(2, 17, 0, 15, 1, 16),
-                     name = "Plot Treatment") +
-  labs(title = "",
-       y = " Native Forb Cover (%)",
-       x = "Year") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.y = element_text(colour="black", size = 10),
-        axis.title.y = element_text(colour="black", size = 12),
-        axis.ticks.y = element_line(colour = "black"),
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_line(colour = "black"),
-        legend.position ="bottom",
-        plot.title = element_text(hjust = 0.5),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 50)) 
-
-
-df_plot_G <- avg_guilds %>%
-  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
-  summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover)))) %>%
-  filter(guild == "grass",
-         Year != "2012") %>%
-  unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
-df_plot_G$Treatment <-factor (df_plot_G$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
-                                                              "Full No Mulch Mowed", "Full No Mulch Unmowed", 
-                                                              "Full Mulch Mowed", "Full Mulch Unmowed"))
-
-
-G_meansplot <- ggplot(df_plot_G, aes (x = Year,  y = meancov*100, color = Treatment, shape = Treatment)) +
-  geom_line () +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = meancov*100 - se*100, 
-                    ymax = meancov*100 + se*100),
-                width=0.2) +
-  scale_color_manual(values = colors6,
-                    name = "Plot Treatment") +
-  scale_shape_manual(values = c(2, 17, 0, 15, 1, 16),
-                     name = "Plot Treatment") +
-  labs(title = "",
-       y = " Native Grass Cover (%)",
-       x = "Year") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.y = element_text(colour="black", size = 10),
-        axis.title.y = element_text(colour="black", size = 12),
-        axis.ticks.y = element_line(colour = "black"),
-        axis.text.x = element_text(colour="black", size = 10),
-        axis.title.x = element_text(colour="black", size = 12),
-        axis.ticks.x = element_line(colour = "black"),
-        legend.position ="bottom",
-        plot.title = element_text(hjust = 0.5),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 50))
-
-
-Means_Leg <- g_legend(G_meansplot)
-
-grid.arrange(arrangeGrob(F_meansplot + theme(legend.position="none"),
-                         G_meansplot + theme(legend.position="none"),
-                         nrow = 2),
-             Means_Leg, nrow = 2, heights = c(12, 1))
-
-```
-
-
-   
-  
-### Beta distribution
+### Beta regression
 
 The transofrmation is a scaling factor that is recommended in a paper -- "Analysing continuous proportions in ecology and evolution: A practical introduction to beta and Dirichlet regression".
 
 
-```{r}
-
+```{r Proportion beta regression, echo = FALSE}
 transform01 <- function(x) {
   (x * (length(x) - 1) + 0.5) / (length(x))}
 
@@ -456,14 +269,17 @@ summary(bm.G18.4)
 
 AIC(bm.G18.1, bm.G18.2, bm.G18.3, bm.G18.4, bm.G18.null)
 
+test(pairs(emmeans(bm.G18.3, ~Mulch, mode = "link")))
+test(pairs(emmeans(bm.G18.3, ~Mowing.treatment, mode = "link")))
+
 
 ```
 
 ```{r Proportion means and SEs, echo=FALSE}
 mean_se_prop <- avg_guilds %>%
-  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
+  group_by(Planted.guild, Year, Planting, Mulch, Mowing.treatment) %>%
   summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover))))
+            se = std.error(Cover))
 
 ```
 
@@ -473,7 +289,7 @@ mean_se_prop <- avg_guilds %>%
 First, we need to create a dataframe of the island planted sections vs. the full sections for only 2018.
 
 ```{r In/Edge/Out/Full dataframe, echo=FALSE}
-avg_spread<- guild_12_18 %>%
+avg_spread <- guild_12_18 %>%
   filter(QuadLocation != "Full") %>%
   group_by(Year, Plot, QuadLocation, Planted.guild) %>%
   summarise(nat.forb = mean(nat.forb),
@@ -488,8 +304,6 @@ f_spread <- avg_spread %>%
   filter(QuadLocation == "Edge" | 
            QuadLocation == "Island" |
            QuadLocation == "Out")
-summary(f_spread)
-str(f_spread)
 
 g_spread <- avg_spread %>%
   filter(Planted.guild == "Grass") %>%
@@ -501,8 +315,12 @@ g_spread <- avg_spread %>%
            QuadLocation == "Island" |
            QuadLocation == "Out")
 
-avg_spread <- full_join(f_spread, g_spread)
-avg_spread$Cover <- as.integer(avg_spread$Cover)
+avg_spread <- full_join(f_spread, g_spread) %>%
+  mutate(Cover = (Cover/100))
+remove(f_spread)
+remove(g_spread)
+summary(avg_spread)
+str(avg_spread)
 
 ```
  
@@ -528,70 +346,196 @@ spread_disp
 
 ```  
 There don't appear to be any super troubling outliers, but the data is not normally distributed. 
- 
-```{r Spread GLM, echo=FALSE}
-# Forbs
-F_spread18 <- avg_spread %>%
+
+
+### Beta regression model
+This is the beta regression modelling to test whether quadlocation affected cover in 2018. 
+
+```{r Quadlocation proportion, echo=FALSE}
+F18_spreadprop <- avg_spread %>%
   filter(guild == "forb",
-         Year == "2018")
-F_spread18$QuadLocation <- as.factor(F_spread18$QuadLocation)
+         Year == "2018") 
 
-F18_spreadGLM_quasi <- glm(Cover ~ QuadLocation, family = quasibinomial, 
-                   data = F_spread18)
-summary(F18_spreadGLM_quasi)
-anova(F18_spreadGLM_quasi, test = "Chisq")
+F18_spreadprop$Cover.scaled <- transform01(F2018_spreadprop$Cover)
+F18_spreadprop$Year <- as.factor(F18_spreadprop$Year)
+str(F18_spreadprop)
 
-#Grasses
-G_spread18 <- avg_spread %>%
+
+
+bm.F18spread.null <- betareg(Cover.scaled ~ 1, 
+                       data=F18_spreadprop, link = c("logit"))
+bm.F18spread.1 <- betareg(Cover.scaled ~ QuadLocation,
+                    data=F18_spreadprop, link = c("logit"))
+bm.F18spread.2 <- betareg(Cover.scaled ~ QuadLocation | QuadLocation,
+                    data=F18_spreadprop, link = c("logit"))
+
+AIC(bm.F18spread.1, bm.F18spread.2, bm.F18spread.null)
+
+
+G18_spreadprop <- avg_spread %>%
   filter(guild == "grass",
-         Year == "2018")
-G_spread18$QuadLocation <- factor(G_spread18$QuadLocation, levels = c("Full", "Island", "Edge", "Out"))
+         Year == "2018") 
+G18_spreadprop$QuadLocation <- factor(G18_spreadprop$QuadLocation, levels = c("Island", "Edge", "Out"))
 
-G18_spreadGLM_quasi <- glm(Cover ~ QuadLocation, family = quasibinomial, 
-                   data = G_spread18)
-summary(G18_spreadGLM_quasi)
-anova(G18_spreadGLM_quasi, test = "Chisq")
+G18_spreadprop$Cover.scaled <- transform01(G18_spreadprop$Cover)
+G18_spreadprop$Year <- as.factor(G18_spreadprop$Year)
+str(G18_spreadprop)
+
+
+bm.G18spread.null <- betareg(Cover.scaled ~ 1, 
+                       data=G18_spreadprop, link = c("logit"))
+bm.G18spread.1 <- betareg(Cover.scaled ~ QuadLocation,
+                    data=G18_spreadprop, link = c("logit"))
+bm.G18spread.2 <- betareg(Cover.scaled ~ QuadLocation | QuadLocation,
+                    data=G18_spreadprop, link = c("logit"))
+
+AIC(bm.G18spread.1, bm.G18spread.2, bm.G18spread.null)
+summary(bm.G18spread.1)
+test(pairs(emmeans(bm.G18spread.2, ~QuadLocation, mode = "link")))
+```
+
+## Question 5: Which species persisted?
+
+I'm interested in knowing which species stuck around until 2018, so I'll just use a simple graph of the dominance of each species -- this is essentially the same code I used pre-GitHub, but modified to be b/w. 
+
+
+### Beta regression
+
+```{r Species-level regression dataframe, echo=FALSE}
+forb_species18_df <- species_14_18 %>%
+  filter(Year == "2018") %>%
+  select(Year, Data.Collector, Plot, Planting.Type, Mowing.treatment, Mulch, Planted.guild, Category,
+         Gri.str, Ach.mil, Sym.chi) %>%
+  gather('Gri.str', 'Ach.mil', 'Sym.chi', key = "Species", value = "Cover") %>%
+  group_by(Species, Plot, Planting.Type, Mowing.treatment, Mulch,) %>%
+  filter(Planted.guild == "Forb") %>%
+  summarise(Cover = mean(Cover)) %>%
+  mutate(Planted.guild = "Forb",
+         Cover = Cover/100) %>%
+  ungroup()
 
 ```
 
-Checking spread Q residuals
 
 
-```{r spread residuals, echo=FALSE}
-op <- par(mfrow = c(2, 2), mar = c(5, 4, 1, 2))
-plot(F18_spreadGLM_quasi, add.smooth = FALSE, which = 1)
-res_spreadF18 <-resid(F18_spreadGLM_quasi)
-hist(res_spreadF18, xlab = "Residuals", main = "")
-plot(x = F_spread18$Cover, y = res_spreadF18, 
-     xlab = "Cover", ylab = "Residuals")
-plot(F_spread18$QuadLocation, res_spreadF18, 
-     xlab = "QuadLocation", ylab = "Residuals")
-par(op)
 
+# Plots for paper
 
-op <- par(mfrow = c(2, 2), mar = c(5, 4, 1, 2))
-plot(G18_spreadGLM_quasi, add.smooth = FALSE, which = 1)
-res_spreadG18 <-resid(G18_spreadGLM_quasi)
-hist(res_spreadG18, xlab = "Residuals", main = "")
-plot(x = G_spread18$Cover, y = res_spreadG18, 
-     xlab = "Cover", ylab = "Residuals")
-plot(G_spread18$QuadLocation, res_spreadG18, 
-     xlab = "QuadLocation", ylab = "Residuals")
-par(op)
+```{r All treatment means & SEs & plots, echo = FALSE}
+meanse_treatment <- avg_guilds %>%
+  filter(Year != "2012") %>%
+  group_by(guild, Year, Treatment) %>%
+  summarise(meancov = mean(Cover),
+            se = std.error(Cover))
+
+meanse_2018 <- avg_guilds %>%
+  filter(Year == "2018") %>%
+  group_by(guild, Mowing.treatment) %>%
+  summarise(meancov = mean(Cover),
+            se = std.error(Cover))
+
+means_F <- meanse_treatment %>%
+  filter(guild == "forb")
+
+F_meansplot <- ggplot(means_F, aes (x = Year,  y = meancov, color = Treatment, shape = Treatment)) +
+  geom_line (aes(linetype = Treatment)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = colors6,
+                    name = "Location") +
+  scale_shape_manual(values = shapes6,
+                     name = "Location") +
+  scale_linetype_manual(values = lines6,
+                        name = "Location") +
+  geom_errorbar(aes(ymin = meancov - se, 
+                    ymax = meancov + se,),
+                width=0.2, show.legend = FALSE) +
+  labs(title = "",
+       y = "Native Forb Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 55)) +
+  scale_y_continuous(breaks = seq(0, 55, 5))
+F_meansplot
+
+means_G <- meanse_treatment %>%
+  filter(guild == "grass")
+
+G_meansplot <- ggplot(means_G, aes (x = Year,  y = meancov, color = Treatment, shape = Treatment)) +
+  geom_line (aes(linetype = Treatment)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = colors6,
+                    name = "Location") +
+  scale_shape_manual(values = shapes6,
+                     name = "Location") +
+  scale_linetype_manual(values = lines6,
+                        name = "Location") +
+  geom_errorbar(aes(ymin = meancov - se, 
+                    ymax = meancov + se,),
+                width=0.2, show.legend = FALSE) +
+  labs(title = "",
+       y = "Native Grass Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_text(colour="black", size = 10),
+        axis.title.x = element_text(colour="black", size = 12),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 45)) +
+  scale_y_continuous(breaks = seq(0, 45, 5)) +
+  guides(col=guide_legend(nrow = 3, byrow = TRUE))
+G_meansplot
+
+Means_Leg <- g_legend(G_meansplot)
+
+grid.arrange(arrangeGrob(F_meansplot + theme(legend.position="none"),
+                         G_meansplot + theme(legend.position="none"),
+                         nrow = 2),
+             Means_Leg, nrow = 2, heights = c(4, 1))
 
 ```
 
 ```{r Spread means & SEs & plots, echo = FALSE}
-
 spread_mean_se <- avg_spread %>%
   group_by(guild, Year, QuadLocation) %>%
   summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover))))
+            se = std.error(Cover))
+
+spread_2018_mean_se <- avg_spread %>%
+  filter(Year == "2018") %>%
+  mutate(Cover = Cover*100) %>%
+  group_by(guild, Year, QuadLocation) %>%
+  summarise(meancov = mean(Cover),
+            se = std.error(Cover))
 
 spread_plot_F <- avg_spread %>%
   group_by(guild, Year, QuadLocation) %>%
   summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover)))) %>%
+            se = std.error(Cover)) %>%
   filter(guild == "forb",
          Year != "2012", Year != "2013", Year != "2014")
 spread_plot_F$QuadLocation <- factor (spread_plot_F$QuadLocation, levels = c("Full", "Island", "Edge", "Out"))
@@ -603,9 +547,9 @@ F_spreadplot <- ggplot(spread_plot_F, aes (x = Year,  y = meancov*100, color = Q
                     ymax = meancov*100 + se*100),
                 width=0.2) +
   scale_color_manual(values = colors4,
-                    name = "Plot Treatment") +
-  scale_shape_manual(values = c(2, 0, 1, 4),
-                     name = "Plot Treatment") +
+                    name = "Location") +
+  scale_shape_manual(values = shapes3,
+                     name = "Location") +
   labs(title = "",
        y = " Native Forb Cover (%)",
        x = "Year") +
@@ -624,14 +568,15 @@ F_spreadplot <- ggplot(spread_plot_F, aes (x = Year,  y = meancov*100, color = Q
         plot.title = element_text(hjust = 0.5),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 60)) 
+  coord_cartesian(ylim = c(0, 75)) +
+  scale_y_continuous(breaks = seq(0, 75, 5))
 F_spreadplot
 
 
 spread_plot_G <- avg_spread %>%
   group_by(guild, Year, QuadLocation) %>%
   summarise(meancov = mean(Cover),
-            se = (var(Cover)/(length(Cover)))) %>%
+            se = std.error(Cover)) %>%
   filter(guild == "grass",
          Year != "2012", Year != "2013", Year != "2014" ) 
 spread_plot_G$QuadLocation<-factor (spread_plot_G$QuadLocation,  levels = c("Full", "Island", "Edge", "Out"))
@@ -644,9 +589,9 @@ G_spreadplot <- ggplot(spread_plot_G, aes (x = Year,  y = meancov*100, color = Q
                     ymax = meancov*100 + se*100),
                 width=0.2) +
   scale_color_manual(values = colors4,
-                    name = "Plot Treatment") +
-  scale_shape_manual(values = c(2, 0, 1, 4),
-                     name = "Plot Treatment") +
+                    name = "Location") +
+  scale_shape_manual(values = shapes3,
+                     name = "Location") +
   labs(title = "",
        y = " Native Grass Cover (%)",
        x = "Year") +
@@ -665,17 +610,125 @@ G_spreadplot <- ggplot(spread_plot_G, aes (x = Year,  y = meancov*100, color = Q
         plot.title = element_text(hjust = 0.5),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(color = "black", size = 12)) +
-  coord_cartesian(ylim = c(0, 45))
+  coord_cartesian(ylim = c(0, 45)) +
+  scale_y_continuous(breaks = seq(0, 45, 5))
 
 
-Means_Leg <- g_legend(G_spreadplot)
+Prop_leg <- g_legend(G_spreadplot)
 
 grid.arrange(arrangeGrob(F_spreadplot + theme(legend.position="none"),
                          G_spreadplot + theme(legend.position="none"),
                          nrow = 2),
-             Means_Leg, nrow = 2, heights = c(12, 1))
+             Prop_leg, nrow = 2, heights = c(12, 1))
 
 ```
 
+```{r Forb graph by species}
+
+forb_species_df <- species_14_18 %>%
+  select(Year, Data.Collector, Plot, Planting.Type, Mowing.treatment, Mulch, Planted.guild, Category,
+         Gri.str, Ach.mil, Sym.chi) %>%
+  gather('Gri.str', 'Ach.mil', 'Sym.chi', key = "Species", value = "Cover") %>%
+  group_by(Year, Species, Planting.Type, Mowing.treatment, Mulch,) %>%
+  filter(Planted.guild == "Forb") %>%
+  summarise(Cover = mean(Cover),
+            se = std.error(Cover)) %>%
+  mutate(Planted.guild = "Forb",
+         Planting1 = Planting.Type,
+         Mulch1 = Mulch,
+         Mowing.treatment1 = Mowing.treatment) %>%
+  unite("Planting1", "Mulch1", "Mowing.treatment1", col = "Treatment", sep = " ") %>%
+  ungroup()
+
+## helper function to string-wrap treatment names
+swr = function(string, nwrap=15) {
+  paste(strwrap(string, width=nwrap), collapse="\n")}
+swr = Vectorize(swr)
+
+forb_species_df$Treatment <- swr(forb_species_df$Treatment)
+
+Forbs_by_Spp <- ggplot(forb_species_df, aes (x = Year,  y = Cover, factor = Species, fill = Species)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = colors4,
+                    name = "Species") +
+  labs(title = "",
+       y = "Species Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="right",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 45)) +
+  scale_y_continuous(breaks = seq(0, 45, 5), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2014, 2018, 1)) +
+  facet_grid(~Treatment) +
+  guides(col=guide_legend(nrow = 3, byrow = TRUE))
+
+Forbs_by_Spp
+
+```
+
+```{r Grass graph by species}
+grass_species_df <- species_14_18 %>%
+  select(Year, Data.Collector, Plot, Planting.Type, Mowing.treatment, Mulch, Planted.guild, Category,
+         Bro.car, Sti.pul, Hor.bra, Jun.pat) %>%
+  gather('Bro.car', 'Sti.pul', 'Hor.bra', 'Jun.pat', key = "Species", value = "Cover") %>%
+  group_by(Year, Species, Planting.Type, Mowing.treatment, Mulch,) %>%
+  filter(Planted.guild == "Grass") %>%
+  summarise(Cover = mean(Cover),
+            se = std.error(Cover)) %>%
+  mutate(Planted.guild = "Grass",
+         Planting1 = Planting.Type,
+         Mulch1 = Mulch,
+         Mowing.treatment1 = Mowing.treatment) %>%
+  unite("Planting1", "Mulch1", "Mowing.treatment1", col = "Treatment", sep = " ") %>%
+  ungroup()
+
+
+grass_species_df$Treatment <- swr(grass_species_df$Treatment)
+
+Grass_by_Spp <- ggplot(grass_species_df, aes (x = Year,  y = Cover, factor = Species, fill = Species)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = color5,
+                    name = "Species") +
+  labs(title = "",
+       y = "Species Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_text(colour="black", size = 10, angle=-90, hjust = 1, vjust=0.5),
+        axis.title.x = element_text(colour="black", size = 12),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="right",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_blank(),
+        strip.text = element_blank()) +
+  coord_cartesian(ylim = c(0, 40)) +
+  scale_y_continuous(breaks = seq(0, 40, 5), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2014, 2018, 1)) +
+  facet_grid(~Treatment, ) +
+  guides(col=guide_legend(nrow = 3, byrow = TRUE))
+
+Grass_by_Spp
+
+grid.arrange(arrangeGrob(Forbs_by_Spp, Grass_by_Spp, nrow = 2, heights = c(1,1)))
+```
 
 
