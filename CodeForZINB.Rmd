@@ -1,0 +1,203 @@
+---
+title: "ZINB Code"
+author: "Josie Lesage"
+date: "9/27/2019"
+output: html_document
+---
+
+This is old ZINB code I made for the island project, which I'd like to hold onto but which I'm fairly certain is incorrect.
+
+### [DON'T USE] Zero-inflated glm with ZINB
+```{r GLM Forbs 2018, echo=FALSE, dependson="Averaging to plot level"}
+F2018 <- avg_guilds %>%
+  filter(guild == "forb",
+         Year == "2018")
+F2018$Category <- as.factor(F2018$Category)
+F2018$Mulch <- as.factor(F2018$Mulch)
+F2018$Mowing.treatment <- as.factor(F2018$Mowing.treatment)
+F2018$Planting <- as.factor(F2018$Planting)
+
+F18_ZIP <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch  | Planting * Mowing.treatment + Mulch,
+               data = F2018, dist = "poisson")
+
+F18_ZINB <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch | Planting * Mowing.treatment + Mulch,
+               data = F2018, dist = "negbin")
+
+#compare ZIP and ZINB
+lrtest(F18_ZIP, F18_ZINB)
+
+# Results of the ZINB model
+summary(F18_ZINB)
+```
+
+At this point, it is clear from the model that there are no impacts of these factors in the long run. 
+
+
+```{r GLM Grasses 2018, echo=FALSE, dependson="Averaging to plot level"}
+G2018 <- avg_guilds %>%
+  filter(guild == "grass",
+         Year == "2018")
+G2018$Category <- as.factor(G2018$Category)
+G2018$Mulch <- as.factor(G2018$Mulch)
+G2018$Mowing.treatment <- as.factor(G2018$Mowing.treatment)
+G2018$Planting <- as.factor(G2018$Planting)
+
+G18_ZIP <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch  | Planting * Mowing.treatment + Mulch,
+               data = G2018, dist = "poisson")
+
+G18_ZINB <- zeroinfl(Cover ~ Planting * Mowing.treatment + Mulch | Planting * Mowing.treatment + Mulch,
+               data = G2018, dist = "negbin")
+
+#compare ZIP and ZINB
+lrtest(G18_ZIP, G18_ZINB)
+
+# Results of the ZINB model
+summary(G18_ZINB)
+
+## Mulching appears significant, we'll test the model without mulching.
+
+```
+
+
+#### Checking the residuals
+```{r Residual check, dependson="GLM 2018", echo=FALSE}
+
+op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
+plot(F18_GLM_quasi, add.smooth = FALSE, which = 1)
+res_F18 <-resid(F18_GLM_quasi)
+hist(res_F18, xlab = "Residuals", main = "")
+plot(x = F2018$Cover, y = res_F18, 
+     xlab = "Cover", ylab = "Residuals")
+plot(F2018$Planting, res_F18, 
+     xlab = "Planting", ylab = "Residuals")
+plot(F2018$Mulch, res_F18, 
+     xlab = "Mulch", ylab = "Residuals")
+plot(F2018$Mowing.treatment, res_F18, 
+     xlab = "Mowing treatment", ylab = "Residuals")
+par(op)
+glm.diag.plots(F18_GLM_quasi)
+
+op <- par(mfrow = c(2, 3), mar = c(5, 4, 1, 2))
+plot(G18_GLM_quasi, add.smooth = FALSE, which = 1)
+res_G18 <-resid(G18_GLM_quasi)
+hist(res_G18, xlab = "Residuals", main = "")
+plot(x = G2018$Cover, y = res_G18, 
+     xlab = "Cover", ylab = "Residuals")
+plot(G2018$Planting, res_G18, 
+     xlab = "Planting", ylab = "Residuals")
+plot(G2018$Mulch, res_G18, 
+     xlab = "Mulch", ylab = "Residuals")
+plot(G2018$Mowing.treatment, res_G18, 
+     xlab = "Mowing treatment", ylab = "Residuals")
+par(op)
+glm.diag.plots(G18_GLM_quasi)
+```
+
+
+#### Means and Std. Err reports
+These are the calculations for the means and std. errors, to be reported in the final paper. 
+
+```{r Treatment Means+SE Calcs & plots, echo=FALSE}
+
+mean_se <- avg_guilds %>%
+  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
+  summarise(meancov = mean(Cover),
+            se = (var(Cover)/(length(Cover))))
+
+df_plot_F <- avg_guilds %>%
+  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
+  summarise(meancov = mean(Cover),
+            se = (var(Cover)/(length(Cover)))) %>%
+  filter(guild == "forb",
+         Year != "2012") %>%
+  unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
+df_plot_F$Treatment <-factor (df_plot_F$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
+                                                              "Full No Mulch Mowed", "Full No Mulch Unmowed", 
+                                                              "Full Mulch Mowed", "Full Mulch Unmowed"))
+
+F_meansplot <- ggplot(df_plot_F, aes (x = Year,  y = meancov*100, color = Treatment, shape = Treatment)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = meancov*100 - se*100, 
+                    ymax = meancov*100 + se*100),
+                width=0.2) +
+  scale_color_manual(values = colors6,
+                    name = "Plot Treatment") +
+  scale_shape_manual(values = c(2, 17, 0, 15, 1, 16),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = " Native Forb Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 50)) 
+
+
+df_plot_G <- avg_guilds %>%
+  group_by(guild, Year, Planting, Mulch, Mowing.treatment) %>%
+  summarise(meancov = mean(Cover),
+            se = (var(Cover)/(length(Cover)))) %>%
+  filter(guild == "grass",
+         Year != "2012") %>%
+  unite(Planting, Mulch, Mowing.treatment, col = "Treatment", sep =" ")
+df_plot_G$Treatment <-factor (df_plot_G$Treatment, levels = c("Island Mulch Mowed", "Island Mulch Unmowed",
+                                                              "Full No Mulch Mowed", "Full No Mulch Unmowed", 
+                                                              "Full Mulch Mowed", "Full Mulch Unmowed"))
+
+
+G_meansplot <- ggplot(df_plot_G, aes (x = Year,  y = meancov*100, color = Treatment, shape = Treatment)) +
+  geom_line () +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = meancov*100 - se*100, 
+                    ymax = meancov*100 + se*100),
+                width=0.2) +
+  scale_color_manual(values = colors6,
+                    name = "Plot Treatment") +
+  scale_shape_manual(values = c(2, 17, 0, 15, 1, 16),
+                     name = "Plot Treatment") +
+  labs(title = "",
+       y = " Native Grass Cover (%)",
+       x = "Year") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(colour="black", size = 10),
+        axis.title.y = element_text(colour="black", size = 12),
+        axis.ticks.y = element_line(colour = "black"),
+        axis.text.x = element_text(colour="black", size = 10),
+        axis.title.x = element_text(colour="black", size = 12),
+        axis.ticks.x = element_line(colour = "black"),
+        legend.position ="bottom",
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(color = "black", size = 12)) +
+  coord_cartesian(ylim = c(0, 50))
+
+
+Means_Leg <- g_legend(G_meansplot)
+
+grid.arrange(arrangeGrob(F_meansplot + theme(legend.position="none"),
+                         G_meansplot + theme(legend.position="none"),
+                         nrow = 2),
+             Means_Leg, nrow = 2, heights = c(12, 1))
+
+```
+
+
+   
+  

@@ -7,17 +7,16 @@ output: html_document
 library(tidyverse)
 library(grid)
 library(lme4)
-
 ```
 
 
 
-## Creating a single **GUILD LEVEL** dataframe (2012-2018)
+# Creating a single **GUILD LEVEL** dataframe (2012-2018)
 
-This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.
+This R Markdown document details the process of cleaning the 2012-2018 Island Planting Project data.  
 
-To begin, we will import all of the .csv files as objects. 
-After the data is imported, we clean each year and the compile them together into a single document.
+To begin, we will import all of the .csv files as objects.  
+After the data is imported, we clean each year and the compile them together into a single document.  
 
 ```{r Import guild-level, include = FALSE}
 setwd("C:/Users/zeven_000/Desktop/UCSC/2019 - (3) Summer/Island Planting Exp/Old Data")
@@ -33,7 +32,7 @@ D2012 <- read.csv("2012_BackgroundVeg.csv")
 ```
 
 
-```{r Guild-level restructure and compile, include = FALSE}
+```{r Guild-level restructure and compile, include = FALSE, cache=TRUE, dependson="Import guild-level"}
 # ---- 2018 ----
 D2018 <- D2018 %>%
   replace(is.na(.), 0) %>%
@@ -76,6 +75,17 @@ D2016$Plot <- as.factor(D2016$Plot)
 
 
 # ---- 2015 ----
+## plot 25 is labeled incorrectly, should be CFNM.
+D2015_25 <- D2015 %>%
+  filter(plot.. == "25") %>%
+  rename(Treatment2 = Treatment) %>%
+  mutate(Treatment = recode_factor(Treatment2, "Full Mulched" = "Full Not Mulched")) %>%
+  select(-Treatment2)
+
+D2015 <- D2015 %>%
+  filter(plot.. != "25") %>%
+  full_join(D2015_25)
+
 D2015 <- D2015 %>%
   replace(is.na(.), 0) %>%
   rename(Data.Collector = Data.Collectors,
@@ -94,6 +104,23 @@ D2015$Year <- as.factor(D2015$Year)
 
   
 # ---- 2014 ----
+## 2014 has a lot of issues - no plots 9, 14, 15, 19, or 25.
+## Additionally, plot 18 is getting labeled incorrectly. It should be CIM. 
+
+D2014_18 <- D2014 %>%
+  filter(Plot == "18") %>%
+  rename(ID2 = ID,
+         Category2 = Category,
+         Planting.Type2 = Planting.Type) %>%
+  mutate(Category = recode_factor(Category2, "Full Mulch" = "Island Mulch"),
+         ID = recode_factor(ID2, "CFM" = "CIM"),
+         Planting.Type = recode_factor(Planting.Type2, "Full" = "Island")) %>%
+  select(-ID2, -Category2, -Planting.Type2)
+
+D2014 <- D2014 %>%
+  filter(Plot != "18") %>%
+  full_join(D2014_18)
+
 D2014 <- D2014 %>%
   mutate(Planted.guild = ifelse(Quadrant == "NE", "Grass", ifelse 
                                 (Quadrant == "NW", "Grass", ifelse
@@ -107,18 +134,32 @@ D2014$Year <- as.factor(D2014$Year)
 D2014$Plot <- as.factor(D2014$Plot)
 
 # ---- 2013 ----
+## 2013 has some unique issues - plots 1 and 14 are mislabeled, and need to be fixed. We'll isolate their data, and then group them back in with the correct info. 
+D2013_14 <- D2013 %>%
+  filter(Plot == "14") %>%
+  rename(ID2 = ID,
+         Treatment2 = Treatment) %>%
+  mutate(ID = recode_factor(ID2, "Island Not Mulched" = "Full Not Mulched"),
+            Treatment = recode_factor(Treatment2, "Island" = "Full")) %>%
+  select(-ID2, -Treatment2)
+
+D2013 <- D2013 %>%
+  filter(Plot != "14") %>%
+  full_join(D2013_14)
+
 D2013 <- D2013 %>%
   mutate(Year = "2013") %>%
-  filter(Treatment != "Seeded") %>%
-  mutate(Category = ifelse(Treatment.Mulch == "IPNM", "Island Not Mulched", 
-                           ifelse (Treatment.Mulch == "FPNM", "Full Not Mulched", 
-                                   ifelse(Treatment.Mulch == "IPM", "Island Mulched",
-                                          ifelse(Treatment.Mulch == "FPM", "Full Mulched", "WRONG")))),
+  filter(Treatment != "Seeded",
+         Plot != "13") %>%
+  mutate(Category = ifelse(ID == "Island Not Mulched", "Island Not Mulched", 
+                           ifelse (ID == "Full Not Mulched", "Full Not Mulched", 
+                                   ifelse(ID == "Island Mulched", "Island Mulched",
+                                          ifelse(ID == "Full Mulched", "Full Mulched", "WRONG")))),
          Planting.Type = ifelse(Treatment == "Full", "Full",
                                 ifelse(Treatment == "Island", "Island", "WRONG")),
          QuadLocation = ifelse(Planting.Type == "Full", "Full", 
                                ifelse(Planting.Type == "Island", "Not recorded", "WRONG")),
-         Mow = ifelse(Mow =="Mow", "Mowed",
+         Mow = ifelse(Mow == "Mow", "Mowed",
                       ifelse(Mow == "No Mow", "Unmowed", "WRONG"))) %>%
 rename(
     Planted.guild = Grass.or.Forb,
@@ -165,6 +206,8 @@ guilds_12_18 <- full_join(guilds_12_18, D2012, by = c("Year", "Data.Collector", 
 
 ```
 
+After we have a compiled dataset, there are still a few minor cleanup things that need to happen: renaming all of the catergories to be consistent, and renaming the plot IDs to be consistent. 
+
 ```{r Guild-level: remove error data, include = FALSE}
 guilds_12_18 <- guilds_12_18 %>%
   filter(total.cover > 2.5) %>%
@@ -177,6 +220,21 @@ guilds_12_18 <- guilds_12_18 %>%
                            "Full No Mulch" = "Full Not Mulched",
                            "Island Mulch" = "Island Mulched",
                            "Island Mulch " = "Island Mulched"),
+         Plot = recode(Plot, "1" = "1 CIM",
+                       "12" = "12 CFM",
+                       "14" = "14 CFNM",
+                       "15" = "15 CIM",
+                       "17" = "17 CFNM",
+                       "18" = "18 CIM",
+                       "19" = "19 CIM",
+                       "2" = "2 CFM",
+                       "22" = "22 CFM",
+                       "24" = "24 CFNM",
+                       "25" = "25 CFNM",
+                       "4" = "4 CIM",
+                       "6" = "6 CFNM",
+                       "7" = "7 CFM",
+                       "9" = "9 CFM"),
          Mowing.treatment = recode(Mowing.treatment, "Mowed " = "Mowed"),
          QuadLocation = recode(QuadLocation, " " = "Full",
                                "N/A" = "Not recorded"))
@@ -228,12 +286,26 @@ species_14_18 <- full_join(pplots, D2014, by = c("Year", "Data.Collector", "Plot
 species_14_18 <- full_join(species_14_18, D2017, by = c("Year", "Data.Collector", "Plot", "ID", "Mulch", "Planted.guild", "Category", "Mowing.treatment", 
                                                         "Planting.Type", "Exo.grass", "Exo.forb", "nat.grass", "nat.forb", 
                                                         "Bro.car", "Sti.pul", "Hor.bra", "Gri.str", "Ach.mil", "Sym.chi", "Jun.pat"))
+species_14_18 <- species_14_18 %>%
+  replace(is.na(.), 0) %>%
+  mutate(Category = recode(Category, "Full Mulch" = "Full Mulched",
+                           "Full No Mulch" = "Full Not Mulched",
+                           "Island Mulch" = "Island Mulched",
+                           "Island Mulch " = "Island Mulched"),
+         Mowing.treatment = recode(Mowing.treatment, "Mowed " = "Mowed"),
+         QuadLocation = recode(QuadLocation, " " = "Full",
+                               "N/A" = "Not recorded"))
+
+
 ```
 
-
+  
+  
+  
 ## Uploading .csv files to GitHub
+We will upload our cleaned data to GitHub to be called up easily. 
 
-```{r Upload to GitHub, include = FALSE}
+```{r Upload to GitHub}
 write.csv(species_14_18, "Species_2014_2018.csv")
 write.csv(guilds_12_18, "Guild_2012_2018.csv")
 
